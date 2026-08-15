@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NCM 118 SimMonitor — Critical Care Rhythm, Monitor and Scenario Trainer</title>
+<meta name="description" content="Faculty-controlled patient monitor, defibrillator/pacer simulator, rhythm drills and branching deterioration scenarios for undergraduate critical care nursing.">
+<style>
+:root{
+  /* Instrument face */
+  --ink:#07131A; --ink2:#0E2430; --bezel:#14303C; --rule:#21485A;
+  --ink-text:#CBE4EE; --ink-dim:#6D93A4;
+  /* Channel colours (clinical convention) */
+  --ecg:#4CE0A0; --pleth:#37C2F0; --art:#FF5F6D; --co2:#F2C24B; --resp:#E3E7EA;
+  /* NCM 118 house palette */
+  --maroon:#7B1E2B; --maroon-d:#5E1621; --cream:#E7D5C9; --cream2:#F5EEE8; --slate:#2F4E5E;
+  --alarm:#E5484D; --warn:#F0A422; --ok:#2E9E6B;
+  --display:"Book Antiqua","Palatino Linotype",Palatino,"Iowan Old Style",Georgia,serif;
+  --body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+  --r:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{
+  font-family:var(--body); background:var(--cream2); color:#1B2A31;
+  -webkit-text-size-adjust:100%; overscroll-behavior:none;
+}
+button{font-family:inherit; cursor:pointer; border:0; background:none; color:inherit}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--co2); outline-offset:2px}
+h1,h2,h3,h4{font-family:var(--display); font-weight:700; margin:0; letter-spacing:.005em}
+.mono{font-family:var(--mono); font-variant-numeric:tabular-nums}
+
+/* ---------- Shell ---------- */
+#app{min-height:100dvh; display:flex; flex-direction:column}
+.topbar{
+  display:flex; align-items:center; gap:10px; padding:8px 12px;
+  background:var(--maroon); color:var(--cream2); position:sticky; top:0; z-index:40;
+}
+.topbar .brand{font-family:var(--display); font-size:15px; font-weight:700; letter-spacing:.02em; white-space:nowrap}
+.topbar .brand small{display:block; font-family:var(--body); font-size:10px; font-weight:400; opacity:.75; letter-spacing:.08em; text-transform:uppercase}
+.tabs{display:flex; gap:4px; margin-left:auto; flex-wrap:wrap; justify-content:flex-end}
+.tab{
+  font-size:12px; padding:7px 11px; border-radius:99px; color:var(--cream);
+  background:rgba(255,255,255,.10); border:1px solid transparent; letter-spacing:.02em;
+}
+.tab[aria-selected="true"]{background:var(--cream2); color:var(--maroon-d); font-weight:600}
+.view{display:none; flex:1; min-height:0}
+.view.on{display:block}
+.wrap{max-width:1040px; margin:0 auto; padding:20px 16px 64px}
+
+/* ---------- Landing ---------- */
+.hero{background:var(--ink); color:var(--ink-text); padding:30px 16px 26px; border-bottom:4px solid var(--maroon)}
+.hero-in{max-width:1040px; margin:0 auto}
+.eyebrow{font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--ecg); margin-bottom:10px}
+.hero h1{font-size:clamp(26px,6vw,44px); line-height:1.08; color:#fff; max-width:20ch}
+.hero p{max-width:62ch; color:var(--ink-dim); font-size:15px; line-height:1.6; margin:12px 0 0}
+#heroCanvas{width:100%; height:74px; display:block; margin-top:18px; border-top:1px solid var(--rule); border-bottom:1px solid var(--rule)}
+.cards{display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); margin-top:22px}
+.card{
+  text-align:left; background:#fff; border:1px solid #DCCFC6; border-left:5px solid var(--maroon);
+  border-radius:var(--r); padding:16px; display:block; transition:transform .14s ease, box-shadow .14s ease;
+}
+.card:hover{transform:translateY(-2px); box-shadow:0 10px 22px rgba(47,78,94,.16)}
+.card h3{font-size:17px; margin-bottom:5px; color:var(--maroon-d)}
+.card p{margin:0; font-size:13px; line-height:1.55; color:#4A5A63}
+.card .kbd{display:inline-block; margin-top:9px; font-family:var(--mono); font-size:11px; background:var(--cream); color:var(--maroon-d); padding:3px 7px; border-radius:5px}
+
+/* ---------- Monitor ---------- */
+.monitor{background:var(--ink); min-height:calc(100dvh - 44px); display:flex; flex-direction:column; padding:8px; gap:8px}
+.alarmbar{
+  border-radius:8px; padding:7px 12px; font-family:var(--mono); font-size:13px; letter-spacing:.06em;
+  background:#0F2028; color:var(--ink-dim); border:1px solid var(--rule); display:flex; gap:12px; align-items:center;
+  min-height:36px; text-transform:uppercase;
+}
+.alarmbar.red{background:var(--alarm); color:#fff; border-color:#ff8a8d; animation:pulseAl .9s steps(2) infinite}
+.alarmbar.amber{background:var(--warn); color:#2A1B00; border-color:#ffd489}
+@keyframes pulseAl{50%{filter:brightness(.6)}}
+@media (prefers-reduced-motion:reduce){.alarmbar.red{animation:none}}
+.alarmbar .tag{margin-left:auto; opacity:.8; font-size:11px; letter-spacing:.1em}
+
+.scope{display:grid; grid-template-columns:1fr 168px; gap:8px; flex:1; min-height:280px}
+@media(max-width:640px){.scope{grid-template-columns:1fr 108px}}
+.traces{position:relative; background:#050F14; border:1px solid var(--rule); border-radius:8px; overflow:hidden}
+.traces canvas{position:absolute; inset:0; width:100%; height:100%}
+.chlabels{position:absolute; inset:0; pointer-events:none}
+.chlabel{position:absolute; left:8px; font-family:var(--mono); font-size:10px; letter-spacing:.14em; opacity:.9}
+
+.numcol{display:flex; flex-direction:column; gap:6px}
+.num{background:var(--ink2); border:1px solid var(--rule); border-radius:8px; padding:6px 9px; flex:1; display:flex; flex-direction:column; justify-content:center}
+.num .lab{font-family:var(--mono); font-size:9.5px; letter-spacing:.14em; color:var(--ink-dim)}
+.num .val{font-family:var(--mono); font-weight:700; font-size:clamp(24px,5.5vw,40px); line-height:1; font-variant-numeric:tabular-nums}
+.num .sub{font-family:var(--mono); font-size:10px; color:var(--ink-dim); margin-top:2px}
+.num.hr .val{color:var(--ecg)} .num.spo2 .val{color:var(--pleth)}
+.num.nibp .val{color:#E6D2F0; font-size:clamp(17px,3.6vw,26px)} .num.co2 .val{color:var(--co2)}
+.num.crit .val{color:var(--alarm)}
+
+.deck{display:flex; gap:8px; flex-wrap:wrap; align-items:stretch}
+.pod{background:var(--ink2); border:1px solid var(--rule); border-radius:8px; padding:9px 11px; flex:1; min-width:210px}
+.pod h4{font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:var(--ink-dim); text-transform:uppercase; margin-bottom:8px}
+.row{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+.chip{
+  font-family:var(--mono); font-size:12px; padding:8px 11px; border-radius:7px; background:#12303C;
+  color:var(--ink-text); border:1px solid var(--rule); min-height:38px; display:inline-flex; align-items:center; gap:6px;
+}
+.chip.on{background:var(--ecg); color:#04231A; border-color:var(--ecg); font-weight:700}
+.chip.danger{background:var(--alarm); color:#fff; border-color:#ff9a9d; font-weight:700}
+.chip.warn{background:var(--warn); color:#2A1B00; border-color:#ffd489; font-weight:700}
+.chip.wide{flex:1; justify-content:center}
+.chip[disabled]{opacity:.35}
+.readout{font-family:var(--mono); font-size:12px; color:var(--ink-dim); margin-top:7px; line-height:1.5}
+.readout b{color:var(--ink-text); font-weight:700}
+
+/* ---------- Control panel (phone) ---------- */
+.ctl{background:var(--ink); min-height:calc(100dvh - 44px); padding:10px; color:var(--ink-text)}
+.ctl h4{margin-bottom:8px}
+.linkbar{background:var(--ink2); border:1px solid var(--rule); border-radius:8px; padding:10px; margin-bottom:10px; font-family:var(--mono); font-size:12px}
+.linkbar .dot{display:inline-block; width:9px; height:9px; border-radius:50%; background:#7a5; margin-right:6px; vertical-align:middle}
+.linkbar .dot.off{background:#a55}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:6px}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:6px}
+.stepper{display:flex; align-items:center; gap:6px; background:#12303C; border:1px solid var(--rule); border-radius:7px; padding:5px 7px}
+.stepper button{width:34px; height:34px; border-radius:6px; background:var(--bezel); color:var(--ink-text); font-size:18px; font-family:var(--mono)}
+.stepper .sv{flex:1; text-align:center; font-family:var(--mono); font-size:13px}
+.stepper .sv b{display:block; font-size:17px; color:#fff}
+
+/* ---------- Teaching layers ---------- */
+.lead{font-size:15px; line-height:1.65; color:#3E4F58; max-width:66ch}
+.sect{margin-top:26px}
+.sect > h2{font-size:22px; color:var(--maroon-d); padding-bottom:7px; border-bottom:2px solid var(--cream)}
+.panel{background:#fff; border:1px solid #DCCFC6; border-radius:var(--r); padding:16px; margin-top:12px}
+.callout{border-radius:var(--r); padding:13px 15px; margin:14px 0; font-size:14px; line-height:1.6}
+.callout h5{font-family:var(--display); font-size:14px; margin:0 0 5px; letter-spacing:.02em}
+.c-key{background:var(--cream); border-left:5px solid var(--maroon)} .c-key h5{color:var(--maroon-d)}
+.c-alert{background:#FCE9E9; border-left:5px solid var(--alarm)} .c-alert h5{color:#8E1F22}
+.c-ebp{background:#E9F0F4; border-left:5px solid var(--slate)} .c-ebp h5{color:var(--slate)}
+
+.btn{background:var(--maroon); color:#fff; padding:11px 16px; border-radius:8px; font-size:14px; font-weight:600; display:inline-flex; align-items:center; gap:7px}
+.btn.ghost{background:#fff; color:var(--maroon-d); border:1.5px solid var(--maroon)}
+.btn.sm{padding:8px 12px; font-size:13px}
+.opt{
+  display:block; width:100%; text-align:left; background:#fff; border:1.5px solid #DCCFC6; border-radius:9px;
+  padding:13px 15px; margin-bottom:8px; font-size:14.5px; line-height:1.45; transition:border-color .12s, background .12s;
+}
+.opt:hover{border-color:var(--maroon); background:var(--cream2)}
+.opt.right{border-color:var(--ok); background:#E7F5EE}
+.opt.wrong{border-color:var(--alarm); background:#FCE9E9}
+.opt .mk{font-family:var(--mono); font-size:11px; color:var(--maroon); margin-right:8px}
+.fb{font-size:13.5px; line-height:1.6; padding:11px 13px; border-radius:8px; margin-top:6px; background:var(--cream); border-left:4px solid var(--maroon)}
+.strip{width:100%; height:150px; background:#050F14; border-radius:8px; border:1px solid var(--rule); display:block}
+.scorebar{display:flex; gap:14px; align-items:center; font-family:var(--mono); font-size:13px; color:var(--slate); flex-wrap:wrap}
+.pill{background:var(--cream); color:var(--maroon-d); padding:4px 10px; border-radius:99px; font-size:12px; font-weight:600}
+table.tb{width:100%; border-collapse:collapse; font-size:13.5px; margin-top:10px}
+table.tb th{background:var(--maroon); color:#fff; text-align:left; padding:8px 10px; font-family:var(--display); font-size:13px}
+table.tb td{padding:8px 10px; border-bottom:1px solid #E6DAD2; vertical-align:top}
+table.tb tr:nth-child(even) td{background:var(--cream2)}
+.refs{font-size:13.5px; line-height:1.65}
+.refs li{margin-bottom:11px; padding-left:26px; text-indent:-26px; list-style:none}
+.refs i{font-style:italic}
+.scroller{overflow-x:auto}
+.hide{display:none !important}
+.tiny{font-size:11.5px; color:#6D7B84; line-height:1.5}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <div class="brand">NCM 118 SimMonitor<small>Care of Clients with Life-Threatening Conditions</small></div>
+    <nav class="tabs" role="tablist" aria-label="Modules">
+      <button class="tab" role="tab" data-go="home" aria-selected="true">Start</button>
+      <button class="tab" role="tab" data-go="monitor" aria-selected="false">Monitor</button>
+      <button class="tab" role="tab" data-go="control" aria-selected="false">Control</button>
+      <button class="tab" role="tab" data-go="drill" aria-selected="false">Drill</button>
+      <button class="tab" role="tab" data-go="scenario" aria-selected="false">Scenarios</button>
+      <button class="tab" role="tab" data-go="evidence" aria-selected="false">Evidence</button>
+    </nav>
+  </header>
+
+  <!-- ============ HOME ============ -->
+  <section class="view on" id="v-home">
+    <div class="hero">
+      <div class="hero-in">
+        <div class="eyebrow">Simulated monitor &middot; Undergraduate scope</div>
+        <h1>A bedside monitor your students can read before they ever meet one.</h1>
+        <p>Twenty rhythms with live waveform physiology, a defibrillator and transcutaneous pacer that behave the way real ones do &mdash; including refusing to fire when they should &mdash; timed recognition drills, and branching deterioration scenarios. Run it on a projector and drive it from your phone.</p>
+        <canvas id="heroCanvas" aria-hidden="true"></canvas>
+      </div>
+    </div>
+    <div class="wrap">
+      <div class="cards">
+        <button class="card" data-go="monitor"><h3>Open the display</h3><p>Full-screen patient monitor for the projector or the student station. This screen is the simulator; everything else follows it.</p><span class="kbd">Projector / laptop</span></button>
+        <button class="card" data-go="control"><h3>Open faculty control</h3><p>Thumb-sized controls for rhythm, vitals, arrest, pacing and shocks. Pair it to a display over a room code, or to a second window on this machine.</p><span class="kbd">Phone / tablet</span></button>
+        <button class="card" data-go="drill"><h3>Run a recognition drill</h3><p>Timed strip identification with rationale after every answer, built on the rate&ndash;rhythm&ndash;P&ndash;PR&ndash;QRS method.</p><span class="kbd">Individual or team</span></button>
+        <button class="card" data-go="scenario"><h3>Work a scenario</h3><p>Four branching deteriorations. Choices change the physiology, and a debrief scorecard closes the loop.</p><span class="kbd">Group work</span></button>
+      </div>
+
+      <div class="callout c-key" style="margin-top:22px">
+        <h5>Scope of practice, stated up front</h5>
+        The undergraduate student participates, monitors, recognises and reports. The registered nurse and the medical team decide, prescribe and operate. Every control in this simulator exists so students can <em>recognise and describe</em> what is happening &mdash; not so they can practise independent operation of a defibrillator, pacer or ventilator.
+      </div>
+
+      <div class="callout c-ebp">
+        <h5>Why a simulator counts as evidence-based teaching</h5>
+        The 2025 resuscitation guidelines are unusually explicit about education: they add recommendations supporting rapid-cycle deliberate practice inside life-support training, gamified learning elements for both professionals and lay rescuers, and virtual or augmented reality as training opportunities (American Heart Association, 2025). Repeated, low-stakes, feedback-rich practice is the mechanism &mdash; not the screen itself.
+      </div>
+
+      <h2 style="font-size:20px; color:var(--maroon-d); margin-top:26px">Setting it up in your room</h2>
+      <div class="panel">
+        <table class="tb"><thead><tr><th style="width:26%">Setup</th><th>What to do</th><th style="width:22%">Works offline?</th></tr></thead>
+        <tbody>
+          <tr><td><b>One screen</b></td><td>Open the file and use Monitor, Drill or Scenarios directly. Nothing to pair.</td><td>Yes</td></tr>
+          <tr><td><b>Two windows, one laptop</b></td><td>Extend your display to the projector. Put <b>Monitor</b> full-screen on the projector, open a second browser window on the laptop screen and choose <b>Control</b>. They pair automatically over the browser's own channel.</td><td>Yes</td></tr>
+          <tr><td><b>Phone &rarr; projector</b></td><td>Needs the hosted link. On the display press <b>Pair</b> to get a four-character room code, then open the same link on your phone, choose Control, and enter the code.</td><td>No &mdash; internet required</td></tr>
+        </tbody></table>
+        <p class="tiny" style="margin-top:12px">The phone pairing uses a free public message broker, so no account, server or payment is involved. Some hospital and campus networks block it; if the dot stays red, fall back to the two-window setup, which never leaves the browser.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MONITOR ============ -->
+  <section class="view" id="v-monitor">
+    <div class="monitor">
+      <div class="alarmbar" id="alarmBar"><span id="alarmText">Monitoring &mdash; no active alarms</span><span class="tag" id="bedTag">BED 1 &middot; SIM</span></div>
+
+      <div class="scope">
+        <div class="traces">
+          <canvas id="gridC"></canvas><canvas id="traceC"></canvas>
+          <div class="chlabels">
+            <div class="chlabel" style="top:6px; color:var(--ecg)">ECG II &middot; <span id="swLab">25 mm/s</span></div>
+            <div class="chlabel" style="top:43.5%; color:var(--pleth)">SpO&#8322; PLETH</div>
+            <div class="chlabel" style="top:63.5%; color:var(--art)">ART</div>
+            <div class="chlabel" style="top:83.5%; color:var(--co2)">CO&#8322;</div>
+          </div>
+        </div>
+        <div class="numcol">
+          <div class="num hr"><span class="lab">HR &middot; bpm</span><span class="val" id="nHR">78</span><span class="sub" id="nRhythm">Sinus</span></div>
+          <div class="num spo2"><span class="lab">SpO&#8322; &middot; %</span><span class="val" id="nSpO2">98</span><span class="sub" id="nPR">PR 78</span></div>
+          <div class="num nibp"><span class="lab">NIBP &middot; mmHg</span><span class="val" id="nBP">118/72</span><span class="sub" id="nMAP">(87)</span></div>
+          <div class="num co2"><span class="lab">RR &middot; EtCO&#8322;</span><span class="val" id="nRR">16</span><span class="sub" id="nCO2">EtCO&#8322; 35 &middot; T 36.8</span></div>
+        </div>
+      </div>
+
+      <div class="deck">
+        <div class="pod">
+          <h4>Defibrillator</h4>
+          <div class="row">
+            <button class="chip" id="dEnergyDn">&minus;</button>
+            <span class="chip" style="min-width:78px; justify-content:center" id="dEnergy">150 J</span>
+            <button class="chip" id="dEnergyUp">+</button>
+            <button class="chip" id="dSync">SYNC off</button>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <button class="chip wide" id="dCharge">Charge</button>
+            <button class="chip wide danger" id="dShock">Shock</button>
+          </div>
+          <div class="readout" id="dRead">Biphasic. Select energy, charge, then clear the bed.</div>
+        </div>
+
+        <div class="pod">
+          <h4>Transcutaneous pacer</h4>
+          <div class="row">
+            <button class="chip" id="pOn">Pacer off</button>
+            <button class="chip" id="pRateDn">Rate &minus;</button>
+            <span class="chip" style="min-width:62px; justify-content:center" id="pRate">70</span>
+            <button class="chip" id="pRateUp">+</button>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <button class="chip" id="pMaDn">mA &minus;</button>
+            <span class="chip" style="min-width:62px; justify-content:center" id="pMa">0</span>
+            <button class="chip" id="pMaUp">+</button>
+            <button class="chip wide" id="pPulse">Check a pulse</button>
+          </div>
+          <div class="readout" id="pRead">Electrical capture on the screen is not mechanical capture. Palpate.</div>
+        </div>
+
+        <div class="pod">
+          <h4>Bedside</h4>
+          <div class="row">
+            <button class="chip" id="mCPR">Start CPR</button>
+            <button class="chip" id="mSound">Sound off</button>
+            <button class="chip" id="mMute">Alarm mute</button>
+            <button class="chip" id="mFull">Full screen</button>
+          </div>
+          <div class="row" style="margin-top:6px">
+            <button class="chip wide" id="mPair">Pair a phone</button>
+            <button class="chip wide" id="mSelf">Local controls</button>
+          </div>
+          <div class="readout" id="mRead">Standalone. No control device paired.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CONTROL ============ -->
+  <section class="view" id="v-control">
+    <div class="ctl">
+      <div class="linkbar">
+        <div><span class="dot off" id="cDot"></span><span id="cStatus">Not paired</span></div>
+        <div class="row" style="margin-top:8px">
+          <button class="chip" id="cPairLocal">Pair to window on this device</button>
+          <button class="chip" id="cPairRoom">Enter room code</button>
+        </div>
+      </div>
+
+      <div class="pod" style="margin-bottom:8px">
+        <h4>Rhythm</h4>
+        <div class="grid2" id="cRhythms"></div>
+      </div>
+
+      <div class="pod" style="margin-bottom:8px">
+        <h4>Vital signs</h4>
+        <div class="grid2" id="cVitals"></div>
+      </div>
+
+      <div class="pod" style="margin-bottom:8px">
+        <h4>Events</h4>
+        <div class="grid3" id="cEvents"></div>
+      </div>
+
+      <div class="pod">
+        <h4>Live readout from the display</h4>
+        <div class="readout" id="cMirror">Waiting for the display&hellip;</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DRILL ============ -->
+  <section class="view" id="v-drill">
+    <div class="wrap">
+      <div class="eyebrow" style="color:var(--maroon)">Module 7 &middot; Rhythm recognition</div>
+      <h2 style="font-size:26px; color:var(--maroon-d)">Strip drill</h2>
+      <p class="lead">Six seconds of rhythm, four choices, one rationale. Work the same order every time: rate, then regularity, then P waves, then the PR interval, then QRS width.</p>
+
+      <div id="drillSetup">
+        <div class="panel">
+          <h3 style="font-size:16px; color:var(--maroon-d); margin-bottom:10px">Choose a level</h3>
+          <div class="grid2" style="gap:8px">
+            <button class="btn ghost" data-level="found">Foundation &middot; 7 rhythms</button>
+            <button class="btn ghost" data-level="inter">Intermediate &middot; 13 rhythms</button>
+            <button class="btn ghost" data-level="full">Full set &middot; all 20</button>
+            <button class="btn ghost" data-level="lethal">Arrest rhythms only</button>
+          </div>
+          <p class="tiny" style="margin-top:12px">Ten items per round. Each strip is generated fresh, so rate and irregularity differ every time &mdash; students cannot memorise the picture.</p>
+        </div>
+      </div>
+
+      <div id="drillPlay" class="hide">
+        <div class="scorebar" style="margin-bottom:10px">
+          <span class="pill" id="dqNum">Item 1 of 10</span>
+          <span>Score <b id="dqScore">0</b></span>
+          <span>Streak <b id="dqStreak">0</b></span>
+          <span id="dqTimer" class="mono">15.0 s</span>
+          <button class="btn sm ghost" id="dqQuit" style="margin-left:auto">End round</button>
+        </div>
+        <canvas class="strip" id="dqStrip"></canvas>
+        <div id="dqOpts" style="margin-top:12px"></div>
+        <div id="dqFb"></div>
+        <button class="btn hide" id="dqNext" style="margin-top:10px">Next strip</button>
+      </div>
+
+      <div id="drillDone" class="hide"></div>
+    </div>
+  </section>
+
+  <!-- ============ SCENARIO ============ -->
+  <section class="view" id="v-scenario">
+    <div class="wrap">
+      <div class="eyebrow" style="color:var(--maroon)">Branching deterioration</div>
+      <h2 style="font-size:26px; color:var(--maroon-d)">Scenarios</h2>
+      <p class="lead">Each decision changes the patient. Wrong turns are not blocked &mdash; they play out, which is the point. The debrief at the end names the earliest recoverable moment.</p>
+      <div id="scList" class="cards" style="margin-top:16px"></div>
+      <div id="scPlay" class="hide"></div>
+    </div>
+  </section>
+
+  <!-- ============ EVIDENCE ============ -->
+  <section class="view" id="v-evidence">
+    <div class="wrap">
+      <div class="eyebrow" style="color:var(--maroon)">Currency and sourcing</div>
+      <h2 style="font-size:26px; color:var(--maroon-d)">Evidence behind the simulator</h2>
+      <p class="lead">Every clinical behaviour built into this app traces to a guideline or to the course texts. Where a foundational document predates the five-year window, it is kept only because nothing has superseded it, and it is flagged.</p>
+      <div id="evBody"></div>
+    </div>
+  </section>
+
+</div>
+<script>
+/* ============================================================
+   NCM 118 SimMonitor — clinical content
+   Rhythm library, drill sets, scenarios, evidence list.
+   ============================================================ */
+
+/* Each rhythm: gen = waveform recipe; crit = the five-step read;
+   perf = perfusing by default; shock = defibrillation indicated. */
+const RHYTHMS = {
+  nsr: {name:"Normal sinus rhythm", cat:"Sinus", hr:[60,100], perf:true, shock:false,
+    gen:{k:"sinus", pr:0.16},
+    crit:{rate:"60–100", rhythm:"Regular", p:"Upright, one before every QRS", pr:"0.12–0.20 s, constant", qrs:"< 0.12 s"},
+    nurse:"Baseline. Compare every later strip against this one."},
+
+  sb: {name:"Sinus bradycardia", cat:"Sinus", hr:[38,58], perf:true, shock:false,
+    gen:{k:"sinus", pr:0.17},
+    crit:{rate:"< 60", rhythm:"Regular", p:"Upright, one per QRS", pr:"0.12–0.20 s", qrs:"< 0.12 s"},
+    nurse:"Rate alone does not decide treatment. Look for hypotension, altered mentation, chest discomfort or shock — the signs of instability.",
+    alert:"An athlete at 48 and a septic patient at 48 are not the same patient."},
+
+  st: {name:"Sinus tachycardia", cat:"Sinus", hr:[105,150], perf:true, shock:false,
+    gen:{k:"sinus", pr:0.14},
+    crit:{rate:"> 100, usually < 150", rhythm:"Regular", p:"Upright, may merge with T at high rates", pr:"0.12–0.20 s", qrs:"< 0.12 s"},
+    nurse:"Treat the cause — pain, fever, hypovolaemia, hypoxaemia, anxiety, drugs. Slowing the rate without fixing the cause removes the compensation."},
+
+  afib: {name:"Atrial fibrillation, controlled", cat:"Atrial", hr:[70,95], perf:true, shock:false,
+    gen:{k:"afib"},
+    crit:{rate:"Atrial uncountable; ventricular 60–100", rhythm:"Irregularly irregular", p:"Absent — fibrillatory baseline", pr:"Not measurable", qrs:"< 0.12 s"},
+    nurse:"Irregularly irregular with no findable P waves. Watch for embolic risk; anticoagulation is expected."},
+
+  afibrvr: {name:"Atrial fibrillation with rapid ventricular response", cat:"Atrial", hr:[125,165], perf:true, shock:false,
+    gen:{k:"afib", fast:true},
+    crit:{rate:"Ventricular > 100", rhythm:"Irregularly irregular", p:"Absent", pr:"Not measurable", qrs:"< 0.12 s"},
+    nurse:"Lost atrial kick plus a short filling time. Expect the blood pressure to fall. Report rate, pressure and mentation together.",
+    alert:"A ventricular response under 60 or over 100 is called uncontrolled."},
+
+  aflutter: {name:"Atrial flutter", cat:"Atrial", hr:[140,155], perf:true, shock:false,
+    gen:{k:"aflutter", ratio:2},
+    crit:{rate:"Atrial 250–350; ventricular depends on the conduction ratio", rhythm:"Atrial regular; ventricular regular or variable", p:"Sawtooth flutter waves, countable", pr:"Not measurable", qrs:"< 0.12 s"},
+    nurse:"The countable sawtooth is what separates flutter from fibrillation. At 2:1 the flutter waves hide inside the QRS and T."},
+
+  svt: {name:"Supraventricular tachycardia", cat:"Atrial", hr:[175,215], perf:true, shock:false,
+    gen:{k:"svt"},
+    crit:{rate:"150–250", rhythm:"Very regular", p:"Buried or not visible", pr:"Not measurable", qrs:"< 0.12 s"},
+    nurse:"Narrow, fast, regular, and too fast to be sinus. Vagal manoeuvres and adenosine come before electricity in the stable patient."},
+
+  junc: {name:"Junctional rhythm", cat:"Junctional", hr:[42,58], perf:true, shock:false,
+    gen:{k:"junc"},
+    crit:{rate:"40–60", rhythm:"Regular", p:"Absent, inverted, or after the QRS", pr:"Shortened or absent", qrs:"< 0.12 s"},
+    nurse:"The junction has taken over because the sinus node failed or was blocked. Narrow QRS, slow, regular."},
+
+  pvc: {name:"Sinus rhythm with premature ventricular complexes", cat:"Ventricular", hr:[68,88], perf:true, shock:false,
+    gen:{k:"sinus", pr:0.16, ectopy:0.22},
+    crit:{rate:"Underlying 60–100", rhythm:"Regular, interrupted by early wide beats", p:"None before the ectopic beat", pr:"Absent for the PVC", qrs:"≥ 0.12 s and bizarre for the PVC"},
+    nurse:"Count them, describe the pattern — bigeminy, couplets, unifocal or multifocal — and report increasing frequency.",
+    alert:"Multifocal PVCs, couplets and R-on-T signal rising irritability and can precede a rhythm with no cardiac output."},
+
+  vt: {name:"Monomorphic ventricular tachycardia", cat:"Ventricular", hr:[160,190], perf:"variable", shock:"pulseless",
+    gen:{k:"vt"},
+    crit:{rate:"100–250", rhythm:"Regular", p:"Absent or dissociated", pr:"Absent", qrs:"≥ 0.12 s, wide and uniform"},
+    nurse:"Assess for a pulse before anything else — the treatment splits entirely on that finding.",
+    alert:"Pulseless VT is a shockable arrest rhythm. VT with a pulse and instability is cardioverted, not defibrillated."},
+
+  tdp: {name:"Torsades de pointes", cat:"Ventricular", hr:[200,250], perf:false, shock:true,
+    gen:{k:"tdp"},
+    crit:{rate:"200–250", rhythm:"Irregular", p:"Absent", pr:"Absent", qrs:"Wide, amplitude twisting around the baseline"},
+    nurse:"Look back for a long QT and for the drugs that caused it. Magnesium is the treatment of choice.",
+    alert:"Review every QT-prolonging medication on the chart before the next dose is given."},
+
+  vf: {name:"Ventricular fibrillation, coarse", cat:"Arrest", hr:[0,0], perf:false, shock:true,
+    gen:{k:"vf", amp:1},
+    crit:{rate:"Not countable", rhythm:"Chaotic", p:"None", pr:"None", qrs:"None identifiable"},
+    nurse:"Pulseless. High-quality compressions and defibrillation as early as possible.",
+    alert:"Confirm the patient, not just the screen — a loose electrode or a patient brushing their teeth can mimic VF."},
+
+  vffine: {name:"Ventricular fibrillation, fine", cat:"Arrest", hr:[0,0], perf:false, shock:true,
+    gen:{k:"vf", amp:0.3},
+    crit:{rate:"Not countable", rhythm:"Chaotic, low amplitude", p:"None", pr:"None", qrs:"None"},
+    nurse:"Easily mistaken for asystole. Check the gain and a second lead before calling it flatline."},
+
+  asys: {name:"Asystole", cat:"Arrest", hr:[0,0], perf:false, shock:false,
+    gen:{k:"asys"},
+    crit:{rate:"None", rhythm:"None", p:"Occasional P waves may persist", pr:"None", qrs:"None"},
+    nurse:"Not shockable. Compressions, adrenaline and a hard search for the reversible cause.",
+    alert:"Confirm in two leads and check lead placement and gain before accepting a flat line."},
+
+  pea: {name:"Pulseless electrical activity", cat:"Arrest", hr:[52,78], perf:false, shock:false,
+    gen:{k:"sinus", pr:0.16},
+    crit:{rate:"Any", rhythm:"Organised", p:"May be present", pr:"May be measurable", qrs:"Narrow or wide"},
+    nurse:"An organised rhythm on the screen with no pulse in the patient. Not shockable. Compressions plus the reversible causes.",
+    alert:"This is the rhythm that punishes monitor-watching. The waveform looks survivable; the patient is in arrest."},
+
+  avb1: {name:"First-degree AV block", cat:"Block", hr:[58,78], perf:true, shock:false,
+    gen:{k:"sinus", pr:0.30},
+    crit:{rate:"Usually 60–100", rhythm:"Regular", p:"One per QRS", pr:"> 0.20 s, constant", qrs:"< 0.12 s"},
+    nurse:"Every P conducts, just late. Usually benign on its own — but document it, because it can be the first step in a progression."},
+
+  mobitz1: {name:"Second-degree AV block, Mobitz I (Wenckebach)", cat:"Block", hr:[48,68], perf:true, shock:false,
+    gen:{k:"wenck"},
+    crit:{rate:"Atrial normal; ventricular slower", rhythm:"Regularly irregular, grouped beating", p:"More Ps than QRSs", pr:"Lengthens progressively until a QRS drops", qrs:"< 0.12 s"},
+    nurse:"Longer, longer, longer, drop — then the cycle repeats. Usually nodal and often reversible."},
+
+  mobitz2: {name:"Second-degree AV block, Mobitz II", cat:"Block", hr:[52,58], perf:true, shock:false,
+    gen:{k:"mobitz2"},
+    crit:{rate:"Ventricular slower than atrial", rhythm:"Regular or irregular depending on ratio", p:"More Ps than QRSs", pr:"Constant on the conducted beats", qrs:"Often ≥ 0.12 s"},
+    nurse:"Constant PR with sudden dropped beats. Below the node, unpredictable, and it can progress to complete block. Pacing readiness matters.",
+    alert:"Do not wait for symptoms to worsen before escalating this one."},
+
+  chb: {name:"Third-degree (complete) AV block", cat:"Block", hr:[30,42], perf:true, shock:false,
+    gen:{k:"chb"},
+    crit:{rate:"Atrial 60–100; ventricular 20–40", rhythm:"Both regular, independent of each other", p:"Regular, marching through the QRS", pr:"No relationship", qrs:"Wide if the escape is ventricular"},
+    nurse:"P waves and QRS complexes keep their own time. Expect symptomatic bradycardia and prepare for pacing."},
+
+  ivr: {name:"Idioventricular rhythm", cat:"Ventricular", hr:[22,38], perf:"variable", shock:false,
+    gen:{k:"ivr"},
+    crit:{rate:"20–40", rhythm:"Regular", p:"Absent", pr:"Absent", qrs:"Wide and bizarre"},
+    nurse:"The ventricle's last resort. Frequently pulseless — palpate. If agonal, treat as arrest."},
+
+  paced: {name:"Ventricular paced rhythm", cat:"Paced", hr:[68,72], perf:true, shock:false,
+    gen:{k:"paced", capture:true},
+    crit:{rate:"At the set rate", rhythm:"Regular", p:"May be present and unrelated", pr:"Not applicable", qrs:"Wide, each preceded by a pacing spike"},
+    nurse:"A spike followed by a wide QRS is electrical capture. Mechanical capture is a pulse you can feel.",
+    alert:"Spikes with no following complex is failure to capture. Report it; expect the output in milliamperes to be increased."},
+
+  stemi: {name:"Sinus rhythm with ST-segment elevation", cat:"Sinus", hr:[72,96], perf:true, shock:false,
+    gen:{k:"sinus", pr:0.16, st:0.32},
+    crit:{rate:"Usually 60–100", rhythm:"Regular", p:"Present", pr:"Normal", qrs:"< 0.12 s with an elevated ST segment"},
+    nurse:"A rhythm strip is not a 12-lead. Escalate for a 12-lead immediately; time is muscle."}
+};
+
+const DRILL_SETS = {
+  found: ["nsr","sb","st","afib","vt","vf","asys"],
+  inter: ["nsr","sb","st","afib","afibrvr","aflutter","svt","pvc","vt","vf","asys","avb1","chb"],
+  full:  ["nsr","sb","st","afib","afibrvr","aflutter","svt","junc","pvc","vt","tdp","vf","asys","pea","avb1","mobitz1","mobitz2","chb","ivr","paced"],
+  lethal:["vt","vf","vffine","asys","pea","tdp","ivr"]
+};
+const DRILL_LABEL = {found:"Foundation", inter:"Intermediate", full:"Full set", lethal:"Arrest rhythms"};
+
+/* ---------- Branching scenarios ----------
+   ok: 2 = best, 1 = defensible but incomplete, 0 = unsafe or out of scope */
+const SCENARIOS = [
+{
+  id:"brady", title:"The slow pulse on the ward", module:"Module 7 · Bradyarrhythmia and pacing",
+  blurb:"A 62-year-old man on a medical ward becomes dizzy and grey. Six decisions, one of which most students get wrong.",
+  brief:"Mr. R, 62, admitted two days ago for community-acquired pneumonia. He calls out that the room is spinning. He is pale and clammy. The monitor shows a regular narrow-complex rhythm at 38. Blood pressure 78/44, SpO₂ 94% on 2 L, and he is slow to answer you.",
+  start:{rhythm:"sb", hr:38, sbp:78, dbp:44, spo2:94, rr:22, etco2:33, temp:37.6, pulse:true},
+  steps:[
+   {q:"You are first at the bedside. What do you do?",
+    o:[
+     {t:"Palpate a central pulse, check level of consciousness, and call the registered nurse and the rapid response team while staying with him.", ok:2,
+      fb:"Correct. Confirm perfusion in the patient, then get help without leaving him. Recognising and escalating is the undergraduate contribution — and it is the one that changes outcomes."},
+     {t:"Draw up atropine and give it.", ok:0, fb:"Out of scope, and out of order. Medication is prescribed and given under the registered nurse's authority. Your job here is recognition, escalation and monitoring.",
+      patch:{}},
+     {t:"Document the rate and recheck in 30 minutes.", ok:0, fb:"He is hypotensive, clammy and slow to respond. That is symptomatic bradycardia. Delayed escalation is the classic failure-to-rescue pattern.", patch:{sbp:70,dbp:40,hr:34}},
+     {t:"Apply pacing pads and begin transcutaneous pacing.", ok:1, fb:"Applying pads early is reasonable preparation, but starting the pacer is a prescribed intervention. Prepare, then hand over."}
+    ]},
+   {q:"The rhythm changes. P waves are now regular at about 80 and march straight through wide QRS complexes at 34, with no fixed relationship between them. What is this, and what do you report?",
+    patch:{rhythm:"chb", hr:34, sbp:72, dbp:40},
+    o:[
+     {t:"Third-degree AV block. Report the rhythm, the rate, the blood pressure and his mentation together.", ok:2,
+      fb:"Yes. Independent atrial and ventricular activity is complete heart block. Reporting the rhythm alone is not enough — the team needs the perfusion picture attached to it."},
+     {t:"Second-degree Mobitz II, because beats are being dropped.", ok:0, fb:"In Mobitz II the conducted beats keep a constant PR interval. Here there is no relationship at all between P waves and QRS complexes."},
+     {t:"Junctional escape rhythm.", ok:0, fb:"A junctional escape would be narrow. These complexes are wide, which points to a ventricular escape below the block."},
+     {t:"Atrial flutter with variable block.", ok:0, fb:"There are no sawtooth flutter waves, and the atrial rate is around 80, not 250 or more."}
+    ]},
+   {q:"Atropine is given with no improvement. The team decides on transcutaneous pacing. What is your role?",
+    o:[
+     {t:"Place the pads correctly, connect the monitor leads, and speak up about analgesia and sedation before pacing begins.", ok:2,
+      fb:"Right on both counts. Pacing hurts. Advocating for comfort is a nursing responsibility, not an afterthought, and students consistently forget it."},
+     {t:"Set the rate and increase the output until you see capture.", ok:0, fb:"Operating the pacer is not the undergraduate role. You assist, monitor and report."},
+     {t:"Stand back and observe so you do not get in the way.", ok:1, fb:"You are part of the team. Assisting with pads, leads and comfort is exactly where a student adds value."},
+     {t:"Leave to collect the consent form.", ok:0, fb:"This is an emergency intervention and the patient is unstable. Do not leave the bedside for paperwork."}
+    ]},
+   {q:"The pacer is running at 70 mA. The screen shows a pacing spike followed by a wide complex at exactly 70 per minute. The registered nurse asks you for the patient's status. What do you do first?",
+    patch:{rhythm:"paced", hr:70, pacing:true},
+    o:[
+     {t:"Palpate a femoral or carotid pulse and take a blood pressure before saying anything about capture.", ok:2,
+      fb:"This is the whole lesson. Spike-plus-complex is electrical capture. Mechanical capture is a pulse you can feel and a pressure you can measure. Report the pulse, not the picture."},
+     {t:"Report that capture is confirmed at 70 because the complexes follow every spike.", ok:0,
+      fb:"That is electrical capture only. A paced complex on the screen with no palpable pulse is pulseless electrical activity, and it will be missed by anyone who reads the monitor instead of the patient."},
+     {t:"Increase the output to be sure.", ok:0, fb:"Not your control to turn, and you do not yet know whether more output is needed."},
+     {t:"Silence the alarms so the team can concentrate.", ok:0, fb:"Muting before assessing removes your safety net."}
+    ]},
+   {q:"You cannot feel a pulse with the paced complexes. What now?",
+    patch:{pulse:false, sbp:0, dbp:0},
+    o:[
+     {t:"State plainly that there is no palpable pulse despite pacer spikes and complexes, and start compressions while the team responds.", ok:2,
+      fb:"Correct and urgent. Say it in plain words — 'spikes and complexes on the screen, no pulse in the patient'. That sentence gets the room moving."},
+     {t:"Recheck the pulse for another full minute before speaking.", ok:0, fb:"A minute of silence in a pulseless patient is a minute of no perfusion. Report immediately and keep assessing."},
+     {t:"Assume the pulse is too weak to feel and continue monitoring.", ok:0, fb:"Assumption is the error mode here. No palpable pulse is treated as no pulse."},
+     {t:"Ask for the output to be increased and wait to see if that helps.", ok:1, fb:"More output may well be needed, but perfusion must be supported now."}
+    ]},
+   {q:"Output is increased, mechanical capture is confirmed at 78 with a pressure of 104/62, and he is answering questions again. What belongs in your ongoing care?",
+    patch:{rhythm:"paced", hr:78, sbp:104, dbp:62, pulse:true, pacing:true},
+    o:[
+     {t:"Continuous monitoring, regular pulse and pressure checks, skin under the pads, comfort and sedation needs, and staying with him until a transvenous route is arranged.", ok:2,
+      fb:"That is the complete package. Transcutaneous pacing is a bridge, never a destination, and the patient stays under direct observation."},
+     {t:"Return the monitor to standard alarm limits and resume routine hourly rounds.", ok:0, fb:"He is being paced externally. Routine rounding is not sufficient observation."},
+     {t:"Remove one pad to relieve the skin.", ok:0, fb:"That would stop the pacing that is keeping him perfused."},
+     {t:"Document capture and hand over to the next shift.", ok:1, fb:"Documentation and handover matter, but they do not replace continuing assessment while he is pacer-dependent."}
+    ]}
+  ],
+  debrief:{
+    moment:"The earliest recoverable moment was the first minute — recognising symptomatic bradycardia rather than a number, and escalating without leaving the bedside.",
+    points:[
+     "Instability, not rate, drives urgency: hypotension, altered mentation, ischaemic chest discomfort, signs of shock.",
+     "Complete heart block is diagnosed by the absence of any relationship between P waves and QRS complexes.",
+     "Electrical capture is on the screen. Mechanical capture is in your fingers.",
+     "Pacing is painful; analgesia and sedation are part of the intervention, not an optional extra."
+    ],
+    cite:"Wigginton et al. (2025); Urden et al. (2024)"
+  }
+},
+{
+  id:"vfarrest", title:"Collapse on a monitored bed", module:"Module 7 · Cardiac arrest",
+  blurb:"A witnessed arrest with a defibrillator that will not fire. Teaches the synchronisation error the hard way.",
+  brief:"Mrs. D, 58, day 1 after a coronary angioplasty, is on continuous monitoring. Mid-sentence she slumps. The monitor changes to a chaotic waveform with no identifiable complexes.",
+  start:{rhythm:"nsr", hr:82, sbp:126, dbp:74, spo2:97, rr:16, etco2:36, temp:36.7, pulse:true},
+  steps:[
+   {q:"The monitor shows a chaotic, disorganised waveform. What is your first action?",
+    patch:{rhythm:"vf", pulse:false, sbp:0, dbp:0, spo2:0, etco2:12},
+    o:[
+     {t:"Check the patient for responsiveness, normal breathing and a pulse, shout for help, and start compressions.", ok:2,
+      fb:"Correct. Ventricular fibrillation on a screen can be mimicked by a loose electrode or a patient brushing their teeth. You confirm in the patient — and here the confirmation takes seconds, because she is unresponsive and pulseless."},
+     {t:"Adjust the electrodes first — that pattern often means artefact.", ok:0,
+      fb:"Artefact is a real possibility, but you rule it out by looking at the patient, not by fiddling with leads while a pulseless patient waits."},
+     {t:"Call the doctor and wait at the phone for instructions.", ok:0, fb:"Compressions cannot wait for a phone call. Call for help without leaving her."},
+     {t:"Fetch the defibrillator before touching her.", ok:1, fb:"The defibrillator is needed urgently, but someone else fetches it while compressions begin. Do not leave a pulseless patient alone."}
+    ]},
+   {q:"Pulseless ventricular fibrillation is confirmed and the defibrillator is at the bedside. The SYNC indicator is lit. You select 200 J, charge, clear, and press shock. What happens?",
+    o:[
+     {t:"Nothing discharges. With sync on, the device is hunting for an R wave to time the shock to, and in ventricular fibrillation there is none. Sync must be turned off.", ok:2,
+      fb:"Exactly. This is one of the most common and most dangerous errors in a real code — precious seconds spent pressing a button on a device that is doing what it was designed to do."},
+     {t:"It discharges normally; sync makes no difference in fibrillation.", ok:0,
+      fb:"It does make a difference. Synchronised mode times the shock to the R wave. No R wave means no discharge."},
+     {t:"It discharges at a lower energy than selected.", ok:0, fb:"Sync governs timing, not energy."},
+     {t:"It discharges but converts the rhythm to asystole.", ok:0, fb:"The device will not discharge at all in synchronised mode without a detectable R wave."}
+    ]},
+   {q:"Sync is switched off and the shock is delivered. What happens in the next two seconds?",
+    patch:{rhythm:"vf", etco2:10},
+    o:[
+     {t:"Compressions resume immediately, without pausing to look at the rhythm or feel for a pulse.", ok:2,
+      fb:"Correct. Interruptions in compressions cost perfusion pressure. The rhythm and pulse are checked at the end of the next two-minute cycle, not straight after the shock."},
+     {t:"Everyone pauses to see whether the shock worked.", ok:0,
+      fb:"That pause is exactly what the guidelines work to eliminate. Post-shock rhythm checks waste the perfusion the compressions have built up."},
+     {t:"A pulse check is performed before restarting.", ok:0, fb:"Same problem — an immediate pulse check after a shock adds a hands-off interval with very little diagnostic value."},
+     {t:"The team waits for the defibrillator to re-analyse.", ok:0, fb:"Compressions restart immediately; the device analyses at the next scheduled rhythm check."}
+    ]},
+   {q:"Two minutes in, waveform capnography reads 8 mmHg. What does that tell you, and what should the team do?",
+    patch:{etco2:8},
+    o:[
+     {t:"Compression quality is poor. Push harder and faster, allow full recoil, and swap the compressor.", ok:2,
+      fb:"End-tidal carbon dioxide during arrest is a real-time report card on compression quality and cardiac output. A persistently low value means the compressions are not moving enough blood."},
+     {t:"The endotracheal tube must be misplaced.", ok:1,
+      fb:"Worth ruling out — a sudden drop to near zero suggests a displaced tube. But a low, steady value during arrest more often means poor perfusion."},
+     {t:"It confirms return of circulation.", ok:0, fb:"The opposite. A sharp rise, typically well above 30 to 40, is what suggests return of circulation."},
+     {t:"It is a machine artefact and can be ignored.", ok:0, fb:"Capnography is one of the few objective feedback measures available during a resuscitation. Do not discard it."}
+    ]},
+   {q:"After the next cycle the rhythm is organised at 96 and end-tidal carbon dioxide jumps to 44. What now?",
+    patch:{rhythm:"nsr", hr:96, etco2:44},
+    o:[
+     {t:"Check for a pulse. If present, move to post-arrest care: airway, oxygenation targets, blood pressure, twelve-lead, temperature management and cause-hunting.", ok:2,
+      fb:"Correct. The abrupt capnography rise plus an organised rhythm is the classic signature of restored circulation — but it is confirmed by a pulse, and the work is only half done."},
+     {t:"Declare return of circulation and stand the team down.", ok:0,
+      fb:"An organised rhythm without a confirmed pulse is pulseless electrical activity. And even with a pulse, post-arrest care is where survival with good neurological function is won or lost."},
+     {t:"Continue compressions for two more minutes regardless.", ok:0, fb:"Compressions on a perfusing heart cause harm. Check the pulse."},
+     {t:"Give another shock to secure the rhythm.", ok:0, fb:"An organised rhythm is not shockable."}
+    ]}
+  ],
+  debrief:{
+    moment:"The earliest recoverable moment was the first ten seconds: confirming arrest in the patient rather than debating the waveform on the screen.",
+    points:[
+     "Confirm arrest in the patient — chaotic waveforms have innocent causes.",
+     "Synchronised mode will not discharge in ventricular fibrillation. Sync off for defibrillation, sync on for cardioversion of an organised rhythm.",
+     "Compressions resume immediately after a shock; the rhythm is checked at the next cycle.",
+     "Waveform capnography measures compression quality during arrest and signals return of circulation with an abrupt rise.",
+     "The 2025 guidelines distinguish return of circulation from return of spontaneous circulation, and reserve 'ventilation' for device-assisted breathing."
+    ],
+    cite:"Wigginton et al. (2025); American Heart Association (2025)"
+  }
+},
+{
+  id:"sepsis", title:"Post-operative day one, temperature 38.9", module:"Module 4 · Multi-organ and shock states",
+  blurb:"Deterioration that is easy to normalise. The scoring here rewards escalation, not stoicism.",
+  brief:"Mr. L, 71, is one day after an emergency bowel resection. Overnight observations were unremarkable. This morning he is 38.9 °C, heart rate 118 and regular, blood pressure 96/52 from a baseline of 138/80, respiratory rate 26, SpO₂ 93% on room air, and he is more confused than yesterday.",
+  start:{rhythm:"st", hr:118, sbp:96, dbp:52, spo2:93, rr:26, etco2:31, temp:38.9, pulse:true},
+  steps:[
+   {q:"Which finding should worry you most?",
+    o:[
+     {t:"The new confusion, taken together with a rising respiratory rate and a falling blood pressure.", ok:2,
+      fb:"Yes. New confusion, tachypnoea and hypotension together are the pattern that precedes shock. A rising respiratory rate is the earliest and most consistently ignored warning sign in deterioration."},
+     {t:"The temperature, because 38.9 °C is the highest reading.", ok:1,
+      fb:"Fever is a signal, but fever alone is common after surgery. It is the combination with altered mentation and perfusion failure that carries the risk."},
+     {t:"The oxygen saturation of 93%, because it is below 95%.", ok:1, fb:"Mildly reduced, but the respiratory rate of 26 is the more informative respiratory finding."},
+     {t:"Nothing yet; these are expected on day one after major surgery.", ok:0,
+      fb:"This is the normalising trap. Deterioration is most often missed not because the data were absent but because they were explained away."}
+    ]},
+   {q:"You escalate. The team suspects sepsis. What should be collected before antibiotics are given, provided it causes no delay?",
+    o:[
+     {t:"Blood cultures and a serum lactate.", ok:2,
+      fb:"Correct. Cultures before antibiotics preserve the chance of identifying the organism, and lactate quantifies tissue hypoperfusion. Neither may delay the antibiotic."},
+     {t:"A full blood count only.", ok:1, fb:"Useful, but it is not what guides the first hour."},
+     {t:"Nothing — start antibiotics immediately and investigate later.", ok:1,
+      fb:"The instinct to prioritise antibiotics is right, and antibiotics must not be delayed. But cultures drawn in the same movement cost no time and change the treatment for the next week."},
+     {t:"A twelve-lead ECG before anything else.", ok:0, fb:"Reasonable in a different presentation. Here the picture is infective, not ischaemic."}
+    ]},
+   {q:"Fluid resuscitation is given. Thirty minutes later the blood pressure is 78/40, the heart rate is 132 and the lactate has risen. What is your role now?",
+    patch:{hr:132, sbp:78, dbp:40, rr:30, spo2:90, etco2:26},
+    o:[
+     {t:"Report the failure to respond immediately, prepare for vasopressor infusion and invasive monitoring, and continue close observation.", ok:2,
+      fb:"Correct. Fluid-refractory hypotension after adequate resuscitation defines septic shock. The nurse recognises it, reports it, prepares the equipment and keeps measuring."},
+     {t:"Increase the fluid rate on your own initiative until the pressure improves.", ok:0,
+      fb:"Titrating fluids independently is outside the undergraduate role, and unlimited fluid in shock causes its own harm."},
+     {t:"Position him head-down and continue observations.", ok:0, fb:"Positioning does not treat distributive shock and can worsen his breathing."},
+     {t:"Wait for the next set of routine observations in an hour.", ok:0, fb:"He is deteriorating on a scale of minutes."}
+    ]},
+   {q:"A noradrenaline infusion is started by the registered nurse and an arterial line is inserted. What do you monitor and report?",
+    patch:{sbp:102, dbp:56, hr:118, art:true},
+    o:[
+     {t:"Mean arterial pressure against the ordered target, urine output, mentation, perfusion of the extremities, lactate trend and the infusion site.", ok:2,
+      fb:"That is the full perfusion picture. Mean arterial pressure is the number the team titrates to, and the peripheral site is a genuine hazard with vasopressors."},
+     {t:"Systolic pressure only, since that is what the alarm is set to.", ok:0, fb:"Mean arterial pressure, not systolic, reflects organ perfusion pressure."},
+     {t:"Heart rate and temperature, and leave the rest to the intensivist.", ok:0, fb:"Surveillance is the nursing contribution. Narrowing it defeats the purpose."},
+     {t:"Adjust the infusion rate to reach the target yourself.", ok:0, fb:"Titration is not within the undergraduate role."}
+    ]}
+  ],
+  debrief:{
+    moment:"The earliest recoverable moment was the morning observation round, where a respiratory rate of 26 and new confusion were available and explainable away.",
+    points:[
+     "Respiratory rate and mentation are the earliest and most neglected markers of deterioration.",
+     "Cultures and lactate before antibiotics, provided there is no delay to the antibiotic.",
+     "Fluid-refractory hypotension after adequate resuscitation defines septic shock.",
+     "Mean arterial pressure, not systolic pressure, is the perfusion target that gets titrated."
+    ],
+    cite:"Evans et al. (2021); Urden et al. (2024)"
+  }
+},
+{
+  id:"hyperk", title:"The missed dialysis session", module:"Module 5 · Renal and metabolic crises",
+  blurb:"A rhythm strip that changes shape as the potassium climbs. Ordering the treatment correctly is the assessment.",
+  brief:"Ms. B, 47, has end-stage kidney disease and missed two haemodialysis sessions. She reports weakness and palpitations. Potassium is 7.4 mmol/L. The monitor shows a sinus rhythm at 62 with tall, narrow, peaked T waves.",
+  start:{rhythm:"nsr", hr:62, sbp:148, dbp:88, spo2:96, rr:18, etco2:34, temp:36.5, pulse:true},
+  steps:[
+   {q:"The T waves are tall, narrow and peaked. What is your immediate responsibility?",
+    o:[
+     {t:"Recognise this as a hyperkalaemic change, report the ECG appearance with the potassium result, and keep her on continuous monitoring.", ok:2,
+      fb:"Correct. The value and the waveform together tell the story. Peaked T waves are the earliest electrocardiographic change of hyperkalaemia and they mean the membrane is already affected."},
+     {t:"Reposition the electrodes, because peaked T waves usually mean artefact.", ok:0, fb:"With a potassium of 7.4, this is not artefact until proven otherwise."},
+     {t:"Record it in the notes and mention it at handover.", ok:0, fb:"Far too slow. This is a time-critical electrolyte emergency."},
+     {t:"Give her the routine potassium binder that is due.", ok:0, fb:"Binders act far too slowly for this, and medication decisions are not made independently."}
+    ]},
+   {q:"Twenty minutes later the QRS complexes have widened and the P waves are flattening. In what order should treatment be given?",
+    patch:{rhythm:"ivr", hr:54, sbp:132, dbp:78},
+    o:[
+     {t:"Stabilise the membrane with intravenous calcium, then shift potassium into the cells with insulin and dextrose and a nebulised beta agonist, then remove it with dialysis.", ok:2,
+      fb:"Correct — stabilise, shift, remove. Calcium buys minutes and does nothing to the potassium level. Shifting buys hours. Only dialysis actually removes the load in a patient with no kidney function."},
+     {t:"Start dialysis first, since it is the only definitive treatment.", ok:1,
+      fb:"Dialysis is definitive, but arranging it takes time the myocardium may not have. Membrane stabilisation comes first."},
+     {t:"Give insulin and dextrose first, then calcium if the ECG worsens.", ok:0,
+      fb:"Shifting begins to work in twenty to thirty minutes. With a widening QRS, the myocardium needs protection now."},
+     {t:"Give sodium bicarbonate alone.", ok:0, fb:"Bicarbonate has a limited and inconsistent role and is not the first step for a widening QRS."}
+    ]},
+   {q:"Calcium gluconate is given by the registered nurse. What tells you whether it worked?",
+    patch:{rhythm:"nsr", hr:60, sbp:138, dbp:82},
+    o:[
+     {t:"A repeat ECG showing the QRS narrowing and the T waves returning towards normal, with continuous monitoring throughout.", ok:2,
+      fb:"Correct. Calcium is judged by the electrocardiogram, not the potassium level — which does not change at all."},
+     {t:"A repeat potassium level showing a fall.", ok:0,
+      fb:"Calcium does not lower potassium. Expecting the level to fall is a common and revealing misconception."},
+     {t:"An improvement in her muscle weakness.", ok:1, fb:"Symptoms may improve, but the electrocardiogram is the objective endpoint."},
+     {t:"A rise in urine output.", ok:0, fb:"She has end-stage kidney disease; urine output is not the marker here."}
+    ]},
+   {q:"She is transferred for urgent haemodialysis. What belongs in your monitoring during transfer?",
+    o:[
+     {t:"Continuous ECG monitoring with a defibrillator immediately available, plus regular assessment of level of consciousness and perfusion.", ok:2,
+      fb:"Correct. Hyperkalaemia can deteriorate into a wide, slow, sine-wave pattern and then arrest. Transfer is the moment monitoring is most often relaxed and most needed."},
+     {t:"Intermittent observations every fifteen minutes are sufficient once calcium has been given.", ok:0,
+      fb:"Calcium is temporary. Until the potassium is removed she remains at risk of a lethal rhythm."},
+     {t:"Pulse oximetry alone, since the problem is metabolic.", ok:0, fb:"Oximetry says nothing about the rhythm, which is the threat."},
+     {t:"No monitoring is needed for a short transfer within the hospital.", ok:0, fb:"Unmonitored transfer of an unstable patient is a recognised failure point."}
+    ]}
+  ],
+  debrief:{
+    moment:"The earliest recoverable moment was the first strip: peaked T waves with a potassium of 7.4 required escalation within minutes, not at handover.",
+    points:[
+     "Electrocardiographic progression: peaked T waves, then a flattening P wave and lengthening PR interval, then a widening QRS, then a sine-wave pattern, then arrest.",
+     "Stabilise, shift, remove — calcium, then insulin and dextrose with a beta agonist, then dialysis.",
+     "Calcium is evaluated by the electrocardiogram; it does not change the serum potassium.",
+     "Monitoring is not suspended for transfer."
+    ],
+    cite:"Urden et al. (2024); Wigginton et al. (2025) — confirm against your institution's hyperkalaemia protocol"
+  }
+}
+];
+
+const REFERENCES = [
+ {r:"American Heart Association. (2025). <i>Highlights of the 2025 American Heart Association guidelines for CPR and ECC.</i> https://cpr.heart.org", n:"Source for the unified six-link Chain of Survival, the change from 'rescue breaths' to 'breaths', the distinction between return of circulation and return of spontaneous circulation, and the new education-science recommendations on rapid-cycle deliberate practice, gamified learning and virtual reality."},
+ {r:"Evans, L., Rhodes, A., Alhazzani, W., Antonelli, M., Coopersmith, C. M., French, C., Machado, F. R., Mcintyre, L., Ostermann, M., Prescott, H. C., Schorr, C., Simpson, S., Wiersinga, W. J., Alshamsi, F., Angus, D. C., Arabi, Y., Azevedo, L., Beale, R., Beilman, G., … Levy, M. (2021). Surviving Sepsis Campaign: International guidelines for management of sepsis and septic shock 2021. <i>Critical Care Medicine, 49</i>(11), e1063–e1143. https://doi.org/10.1097/CCM.0000000000005337", n:"Source for the sepsis scenario: cultures and lactate before antibiotics where no delay results, initial fluid resuscitation, and the definition of fluid-refractory hypotension as septic shock."},
+ {r:"Urden, L. D., Stacy, K. M., &amp; Lough, M. E. (2024). <i>Priorities in critical care nursing</i> (9th ed.). Elsevier.", n:"Course text. Source for dysrhythmia criteria, pacing and defibrillation nursing management, and the case-study structure used in the scenarios."},
+ {r:"Wigginton, J. G., Agarwal, S., Bartos, J. A., Coute, R. A., Drennan, I. R., Haamid, A., Kudenchuk, P. J., Link, M. S., Panchal, A. R., Pelter, M. M., Del Rios, M., Rodriguez, A. J., Perman, S. M., Sanko, S., Kotini-Shah, P., &amp; Kurz, M. C. (2025). Part 9: Adult advanced life support: 2025 American Heart Association guidelines for cardiopulmonary resuscitation and emergency cardiovascular care. <i>Circulation, 152</i>(Suppl. 2), S538–S577. https://doi.org/10.1161/CIR.0000000000001376", n:"Source for shockable versus non-shockable rhythm handling, early defibrillation, minimising interruptions in compressions, cardioversion of organised tachyarrhythmias, and the role of waveform capnography."}
+];
+
+const REF_FLAGGED = [
+ {r:"Devlin, J. W., Skrobik, Y., Gélinas, C., Needham, D. M., Slooter, A. J. C., Pandharipande, P. P., Watson, P. L., Weinhouse, G. L., Nunnally, M. E., Rochwerg, B., Balas, M. C., van den Boogaard, M., Bosma, K. J., Brummel, N. E., Chanques, G., Denehy, L., Drouot, X., Fraser, G. L., Harris, J. E., … Alhazzani, W. (2018). Clinical practice guidelines for the prevention and management of pain, agitation/sedation, delirium, immobility, and sleep disruption in adult patients in the ICU. <i>Critical Care Medicine, 46</i>(9), e825–e873. https://doi.org/10.1097/CCM.0000000000003299", n:"Retained outside the five-year window as the foundational PADIS document. Check it against the current focused update before teaching sedation and delirium content from it."},
+ {r:"Republic Act No. 9173, Philippine Nursing Act of 2002.", n:"Retained as current statute. Defines the scope-of-practice boundary stated throughout this simulator."},
+ {r:"Republic Act No. 10173, Data Privacy Act of 2012.", n:"Relevant because this simulator holds no patient data and none should ever be entered into it. All scenario patients are fictional."}
+];
+/* ============================================================
+   Waveform engine — event-scheduled ECG plus derived channels
+   ============================================================ */
+const G = (dt,c,s)=>Math.exp(-((dt-c)*(dt-c))/(2*s*s));
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+
+/* Deterministic-ish low-frequency wander so traces never look synthetic */
+function wander(t){ return 0.018*Math.sin(t*0.62)+0.012*Math.sin(t*1.71+1.2); }
+function hiss(){ return (Math.random()-0.5)*0.022; }
+
+function comp(dt,e){
+  if(dt<-0.06||dt>0.70) return 0;
+  if(e.k==='p')     return 0.145*G(dt,0.022,0.024);
+  if(e.k==='pinv')  return -0.10*G(dt,0.022,0.024);
+  if(e.k==='spike') return 1.45*G(dt,0.002,0.0024);
+  if(e.k==='qrs'){
+    if(e.wide){
+      let v = 1.18*G(dt,0.055,0.033) - 0.46*G(dt,0.120,0.031) - 0.34*G(dt,0.360,0.078);
+      return v*(e.amp||1);
+    }
+    let v = -0.085*G(dt,0.014,0.0085) + 1.06*G(dt,0.036,0.0112) - 0.235*G(dt,0.064,0.0135)
+          + 0.275*G(dt,0.262,0.056);
+    if(e.st) v += e.st*G(dt,0.132,0.042)+e.st*0.45*G(dt,0.196,0.050);
+    if(e.peakT) v += e.peakT*G(dt,0.258,0.028);
+    return v*(e.amp||1);
+  }
+  return 0;
+}
+
+class Trace{
+  constructor(){ this.ev=[]; this.t=0; this.tp=0; this.tq=0; this.i=0; this.cpr=false; this.set('nsr'); }
+  set(key,over){
+    const R = RHYTHMS[key]||RHYTHMS.nsr;
+    this.key=key; this.def=R; this.g=Object.assign({},R.gen);
+    this.hr = (over&&over.hr) || Math.round(rnd(R.hr[0],R.hr[1]));
+    this.ev=[]; this.tp=this.t+0.2; this.tq=this.t+0.2; this.i=0; this.paceCapture=true;
+  }
+  rr(){ return 60/Math.max(this.hr,1); }
+  sched(tEnd){
+    const k=this.g.k, ev=this.ev;
+    let guard=0;
+    while(guard++<600){
+      if(k==='vf'||k==='tdp'||k==='asys') break;
+      if(k==='chb'){
+        const pp=60/78, rrv=60/Math.max(this.hr,20);
+        if(this.tp<=tEnd){ ev.push({t:this.tp,k:'p'}); this.tp+=pp; continue; }
+        if(this.tq<=tEnd){ ev.push({t:this.tq,k:'qrs',wide:true}); this.tq+=rrv; continue; }
+        break;
+      }
+      if(this.tq>tEnd) break;
+      const t=this.tq;
+      if(k==='sinus'){
+        ev.push({t:t,k:'p'});
+        ev.push({t:t+(this.g.pr||0.16),k:'qrs',st:this.g.st||0,peakT:this.g.peakT||0});
+        let adv=this.rr()*rnd(0.97,1.03);
+        if(this.g.ectopy && Math.random()<this.g.ectopy){
+          ev.push({t:t+adv*0.52,k:'qrs',wide:true,amp:1.15});
+          adv*=2;
+        }
+        this.tq=t+adv;
+      } else if(k==='afib'){
+        ev.push({t:t,k:'qrs'});
+        this.tq = t + this.rr()*rnd(0.58,1.48);
+      } else if(k==='aflutter'){
+        ev.push({t:t,k:'qrs'});
+        this.tq = t + 0.2*(this.g.ratio||2)*(Math.random()<0.12?1.5:1);
+      } else if(k==='svt'){
+        ev.push({t:t,k:'qrs'}); this.tq=t+this.rr();
+      } else if(k==='junc'){
+        ev.push({t:t,k:'pinv'}); ev.push({t:t+0.09,k:'qrs'}); this.tq=t+this.rr()*rnd(0.98,1.02);
+      } else if(k==='vt'){
+        ev.push({t:t,k:'qrs',wide:true,amp:1.1}); this.tq=t+this.rr()*rnd(0.98,1.02);
+      } else if(k==='ivr'){
+        ev.push({t:t,k:'qrs',wide:true,amp:0.9}); this.tq=t+this.rr()*rnd(0.95,1.05);
+      } else if(k==='paced'){
+        ev.push({t:t,k:'spike'});
+        if(this.paceCapture) ev.push({t:t+0.022,k:'qrs',wide:true,amp:1.05});
+        this.tq=t+this.rr();
+      } else if(k==='wenck'){
+        const prs=[0.16,0.22,0.30,null], pp=60/76;
+        const pr=prs[this.i%4];
+        ev.push({t:t,k:'p'});
+        if(pr!==null) ev.push({t:t+pr,k:'qrs'});
+        this.i++; this.tq=t+pp;
+      } else if(k==='mobitz2'){
+        const pp=60/82;
+        ev.push({t:t,k:'p'});
+        if(this.i%3!==2) ev.push({t:t+0.19,k:'qrs',wide:true,amp:0.95});
+        this.i++; this.tq=t+pp;
+      } else { ev.push({t:t,k:'qrs'}); this.tq=t+this.rr(); }
+    }
+    if(ev.length>4 && ev[0].t < tEnd-12) this.ev=ev.filter(e=>e.t>=tEnd-12);
+  }
+  ecg(t){
+    const k=this.g.k;
+    let v=wander(t)+hiss();
+    if(k==='vf'){
+      const a=(this.g.amp||1)*(0.55+0.25*Math.sin(t*1.7));
+      return a*(0.62*Math.sin(t*29.1)+0.40*Math.sin(t*44.3+1.1)+0.28*Math.sin(t*18.7+2.3))+hiss();
+    }
+    if(k==='tdp'){
+      const env=0.95*Math.abs(Math.sin(t*Math.PI*0.42))+0.10;
+      return env*Math.sin(t*24.5)*1.15+hiss();
+    }
+    if(k==='asys'){ return v*1.4; }
+    if(k==='afib') v += 0.055*Math.sin(t*41.3)+0.04*Math.sin(t*57.9+0.8);
+    if(k==='aflutter'){
+      const x=(t*5)%1; v += 0.40*(x<0.78? (x/0.78)-0.38 : -2.1*((x-0.78)/0.22)+0.62);
+    }
+    const ev=this.ev;
+    for(let i=0;i<ev.length;i++){ const dt=t-ev[i].t; if(dt>-0.06&&dt<0.70) v+=comp(dt,ev[i]); }
+    if(this.cpr) v += 0.30*Math.sin(t*11.5)*Math.exp(-Math.pow(((t*1.833)%1)-0.15,2)/0.006);
+    return v;
+  }
+  /* perfusing beats only */
+  pulseWave(t,shape){
+    let v=0;
+    if(this.cpr){ const x=(t*1.833)%(1/1.833); v+=0.55*shape(x); }
+    if(!this.perf) return v;
+    const ev=this.ev;
+    for(let i=0;i<ev.length;i++){
+      const e=ev[i]; if(e.k!=='qrs') continue;
+      const x=t-e.t-0.19; if(x>=0&&x<0.80) v+=shape(x);
+    }
+    return v;
+  }
+}
+const plethShape=x=> (1-Math.exp(-x*30))*Math.exp(-x*3.0) + 0.16*G(x,0.33,0.052);
+
+/* ---------------- Simulator state ---------------- */
+const SIM = {
+  rhythm:'nsr', hr:78, spo2:98, rr:16, etco2:35, temp:36.8, sbp:118, dbp:72,
+  pulse:true, cpr:false, pacing:false, pacerRate:70, pacerMa:0, captureAt:65,
+  energy:150, sync:false, charged:false, art:false, muted:false, sound:false,
+  shocks:0, log:[], bed:'BED 1 · SIM'
+};
+const trace = new Trace();
+let t0 = performance.now()/1000;
+let simT = 0;
+
+function perfusing(){
+  const R = RHYTHMS[SIM.rhythm];
+  if(SIM.pacing && SIM.pacerMa>=SIM.captureAt) return SIM.pulse!==false;
+  if(!R) return true;
+  if(R.perf===false) return false;
+  if(R.perf==='variable') return SIM.pulse!==false;
+  return SIM.pulse!==false;
+}
+
+function applyRhythm(key,keepHr){
+  if(!RHYTHMS[key]) return;
+  SIM.rhythm=key;
+  trace.set(key, keepHr?{hr:SIM.hr}:null);
+  if(!keepHr) SIM.hr = trace.hr;
+  const R=RHYTHMS[key];
+  if(R.perf===false){ SIM.pulse=false; SIM.sbp=0; SIM.dbp=0; SIM.spo2=0; SIM.etco2=Math.min(SIM.etco2,14); }
+  else if(SIM.sbp===0){ SIM.pulse=true; SIM.sbp=104; SIM.dbp=60; SIM.spo2=94; }
+}
+
+function displayHR(){
+  const k=SIM.rhythm;
+  if(k==='asys') return 0;
+  if(k==='vf'||k==='vffine') return 0;
+  if(SIM.pacing && SIM.pacerMa>=SIM.captureAt) return SIM.pacerRate;
+  return SIM.hr;
+}
+
+/* ---------------- Canvas rendering ---------------- */
+const BANDS=[{n:'ecg',h:0.42,c:'--ecg'},{n:'pleth',h:0.20,c:'--pleth'},{n:'art',h:0.20,c:'--art'},{n:'co2',h:0.18,c:'--co2'}];
+function cssv(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+function fitCanvas(c){
+  const d=window.devicePixelRatio||1, r=c.getBoundingClientRect();
+  if(!r.width) return false;
+  c.width=Math.round(r.width*d); c.height=Math.round(r.height*d);
+  const x=c.getContext('2d'); x.setTransform(d,0,0,d,0,0);
+  return true;
+}
+function drawGrid(c){
+  if(!fitCanvas(c)) return;
+  const x=c.getContext('2d'), W=c.getBoundingClientRect().width, H=c.getBoundingClientRect().height;
+  x.clearRect(0,0,W,H); x.lineWidth=1;
+  x.strokeStyle='rgba(45,120,145,.16)';
+  for(let i=0;i<W;i+=8){ x.beginPath(); x.moveTo(i+.5,0); x.lineTo(i+.5,H); x.stroke(); }
+  for(let j=0;j<H;j+=8){ x.beginPath(); x.moveTo(0,j+.5); x.lineTo(W,j+.5); x.stroke(); }
+  x.strokeStyle='rgba(45,120,145,.30)';
+  for(let i=0;i<W;i+=40){ x.beginPath(); x.moveTo(i+.5,0); x.lineTo(i+.5,H); x.stroke(); }
+  for(let j=0;j<H;j+=40){ x.beginPath(); x.moveTo(0,j+.5); x.lineTo(W,j+.5); x.stroke(); }
+}
+
+const SWEEP=6;                     /* seconds across the screen */
+let lastX=0, lastVals=null, tc=null, tctx=null, tW=0, tH=0;
+
+function initTrace(){
+  tc=document.getElementById('traceC');
+  if(!tc||!fitCanvas(tc)) return;
+  const r=tc.getBoundingClientRect(); tW=r.width; tH=r.height;
+  tctx=tc.getContext('2d'); tctx.clearRect(0,0,tW,tH); lastX=0; lastVals=null; bandGeom();
+}
+let GEO={}, COL={};
+function bandGeom(){
+  let y=0; const out={};
+  for(const b of BANDS){ const h=tH*b.h; out[b.n]={y:y,h:h,mid:y+h/2}; y+=h; COL[b.n]=cssv(b.c); }
+  GEO=out; return out;
+}
+function chanVal(name,t){
+  const g=GEO[name];
+  if(name==='ecg') return g.mid - trace.ecg(t)*g.h*0.34;
+  if(name==='pleth'){ const v=perfusing()||SIM.cpr? trace.pulseWave(t,plethShape):0; return g.y+g.h*0.86 - clamp(v,0,1.6)*g.h*0.62; }
+  if(name==='art'){
+    if(!SIM.art) return null;
+    const p = perfusing()||SIM.cpr ? SIM.dbp + trace.pulseWave(t,plethShape)*(SIM.sbp-SIM.dbp) : 0;
+    return g.y+g.h*0.92 - clamp(p,0,200)/200*g.h*0.84;
+  }
+  if(name==='co2'){
+    const T=60/Math.max(SIM.rr,4), x=(t%T)/T; const e=SIM.etco2;
+    let v; if(x<0.30) v=0; else if(x<0.36) v=e*((x-0.30)/0.06);
+    else if(x<0.92) v=e*(0.94+0.06*((x-0.36)/0.56)); else v=e*Math.max(0,1-(x-0.92)/0.08);
+    return g.y+g.h*0.94 - clamp(v,0,60)/60*g.h*0.86;
+  }
+  return null;
+}
+function paintTrace(now){
+  if(!tctx) return;
+  const x = ((now%SWEEP)/SWEEP)*tW;
+  const draw=(x1,x2)=>{
+    const steps=Math.max(1,Math.round((x2-x1)/1.4));
+    for(const b of BANDS){
+      tctx.strokeStyle=COL[b.n]||cssv(b.c); tctx.lineWidth=b.n==='ecg'?1.9:1.5; tctx.lineJoin='round';
+      tctx.beginPath(); let started=false;
+      for(let s=0;s<=steps;s++){
+        const px=x1+(x2-x1)*(s/steps);
+        const tt=now-(x-px)/tW*SWEEP;
+        const y=chanVal(b.n,tt);
+        if(y===null){ started=false; continue; }
+        if(!started){ tctx.moveTo(px,y); started=true; } else tctx.lineTo(px,y);
+      }
+      tctx.stroke();
+    }
+  };
+  if(x<lastX){ draw(lastX,tW); tctx.clearRect(0,0,x+18,tH); draw(0,x); }
+  else { tctx.clearRect(x,0,20,tH); draw(lastX,x); }
+  lastX=x;
+}
+
+/* ---------------- Audio ---------------- */
+let AC=null;
+function audio(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ AC=null; } } return AC; }
+function tone(freq,dur,vol,type){
+  const a=audio(); if(!a||!SIM.sound) return;
+  const o=a.createOscillator(), g=a.createGain();
+  o.type=type||'sine'; o.frequency.value=freq;
+  g.gain.setValueAtTime(0.0001,a.currentTime);
+  g.gain.exponentialRampToValueAtTime(vol||0.09,a.currentTime+0.008);
+  g.gain.exponentialRampToValueAtTime(0.0001,a.currentTime+(dur||0.07));
+  o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime+(dur||0.07)+0.02);
+}
+let beeped=new WeakSet(), lastAlarmBeep=0;
+function beatAudio(now){
+  if(!SIM.sound) return;
+  const f = clamp(660+(SIM.spo2-90)*16, 480, 980);
+  for(const e of trace.ev){
+    if(e.k!=='qrs'||beeped.has(e)) continue;
+    if(e.t<=now && e.t>now-0.4){ beeped.add(e); if(perfusing()) tone(f,0.055,0.07); }
+    else if(e.t<=now) beeped.add(e);
+  }
+  const R=RHYTHMS[SIM.rhythm];
+  const crisis = R && (R.perf===false || !perfusing());
+  if(crisis && !SIM.muted && now-lastAlarmBeep>1.6){
+    lastAlarmBeep=now;
+    tone(1180,0.10,0.10,'square'); setTimeout(()=>tone(1180,0.10,0.10,'square'),150); setTimeout(()=>tone(880,0.16,0.10,'square'),300);
+  }
+}
+
+/* ---------------- Static strip rendering (drills, hero) ---------------- */
+function renderStrip(canvas,key,seconds,opts){
+  if(!fitCanvas(canvas)) return;
+  const x=canvas.getContext('2d'), r=canvas.getBoundingClientRect(), W=r.width, H=r.height;
+  x.clearRect(0,0,W,H);
+  x.strokeStyle='rgba(45,120,145,.16)'; x.lineWidth=1;
+  for(let i=0;i<W;i+=8){ x.beginPath(); x.moveTo(i+.5,0); x.lineTo(i+.5,H); x.stroke(); }
+  for(let j=0;j<H;j+=8){ x.beginPath(); x.moveTo(0,j+.5); x.lineTo(W,j+.5); x.stroke(); }
+  x.strokeStyle='rgba(45,120,145,.32)';
+  for(let i=0;i<W;i+=40){ x.beginPath(); x.moveTo(i+.5,0); x.lineTo(i+.5,H); x.stroke(); }
+  for(let j=0;j<H;j+=40){ x.beginPath(); x.moveTo(0,j+.5); x.lineTo(W,j+.5); x.stroke(); }
+  const tr=new Trace(); tr.t=0; tr.tp=0.25; tr.tq=0.25; tr.set(key);
+  if(opts&&opts.hr) tr.hr=opts.hr;
+  tr.sched(seconds+1);
+  x.strokeStyle=cssv('--ecg'); x.lineWidth=1.9; x.lineJoin='round'; x.beginPath();
+  const N=Math.round(W);
+  for(let i=0;i<=N;i++){
+    const tt=(i/N)*seconds, y=H*0.55 - tr.ecg(tt)*H*0.30;
+    if(i===0) x.moveTo(0,y); else x.lineTo(i,y);
+  }
+  x.stroke();
+  return tr;
+}
+/* ============================================================
+   Routing
+   ============================================================ */
+const $=id=>document.getElementById(id);
+const REDUCED = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+let VIEW='home';
+
+function go(name){
+  VIEW=name;
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on', v.id==='v-'+name));
+  document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected', String(t.dataset.go===name)));
+  window.scrollTo(0,0);
+  if(name==='monitor'){ requestAnimationFrame(()=>{ drawGrid($('gridC')); initTrace(); }); }
+  if(name==='evidence') buildEvidence();
+  if(name==='scenario' && !$('scPlay').classList.contains('hide')) {} else if(name==='scenario') listScenarios();
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-go]'); if(b){ go(b.dataset.go); }
+});
+
+/* ============================================================
+   Pairing bus — BroadcastChannel locally, public MQTT for phones
+   ============================================================ */
+const Bus={
+  mode:'off', room:null, ch:null, client:null, handler:null,
+  status(txt,ok){
+    const d=$('cDot'), s=$('cStatus'); if(d) d.classList.toggle('off',!ok); if(s) s.textContent=txt;
+    const m=$('mRead'); if(m && VIEW==='monitor') m.textContent=txt;
+  },
+  local(){
+    if(this.ch) return;
+    try{
+      this.ch=new BroadcastChannel('ncm118-simmonitor');
+      this.ch.onmessage=e=>this.handler&&this.handler(e.data);
+      this.mode='local'; this.status('Paired to other windows on this device','ok');
+    }catch(err){ this.status('This browser cannot pair windows locally',false); }
+  },
+  cloud(room){
+    this.room=room;
+    const start=()=>{
+      try{
+        this.client=mqtt.connect('wss://broker.emqx.io:8084/mqtt',{connectTimeout:8000, reconnectPeriod:4000});
+        this.client.on('connect',()=>{ this.client.subscribe('ncm118sim/'+room); this.mode='cloud'; this.status('Paired · room '+room,true); });
+        this.client.on('message',(t,p)=>{ try{ this.handler&&this.handler(JSON.parse(p.toString())); }catch(e){} });
+        this.client.on('error',()=>this.status('Pairing failed — the network may block it. Use two windows instead.',false));
+      }catch(e){ this.status('Pairing unavailable offline. Use two windows instead.',false); }
+    };
+    if(window.mqtt) return start();
+    this.status('Connecting…',false);
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js';
+    s.onload=start;
+    s.onerror=()=>this.status('Could not load the pairing library. This needs internet — use two windows offline.',false);
+    document.head.appendChild(s);
+  },
+  send(o){
+    o.id=BUS_ID;
+    if(this.ch) try{ this.ch.postMessage(o); }catch(e){}
+    if(this.client&&this.client.connected) try{ this.client.publish('ncm118sim/'+this.room, JSON.stringify(o)); }catch(e){}
+  }
+};
+const BUS_ID = Math.random().toString(36).slice(2,8);
+Bus.handler=msg=>{
+  if(!msg||msg.id===BUS_ID) return;
+  if(msg.type==='patch'){ patchSim(msg.p, true); }
+  if(msg.type==='cmd'){ runCmd(msg.c, true); }
+  if(msg.type==='state'){ renderMirror(msg.s); }
+};
+function roomCode(){ const A='ACDEFHJKLMNPRTUVWXY349'; let s=''; for(let i=0;i<4;i++) s+=A[Math.floor(Math.random()*A.length)]; return s; }
+
+/* ============================================================
+   State changes
+   ============================================================ */
+function patchSim(p,remote){
+  if(!p) return;
+  if(p.rhythm && p.rhythm!==SIM.rhythm) applyRhythm(p.rhythm, !!p.hr);
+  for(const k in p){ if(k!=='rhythm') SIM[k]=p[k]; }
+  if(p.hr) trace.hr=p.hr;
+  if(!remote) Bus.send({type:'patch',p:p});
+  paintNumbers();
+}
+function runCmd(c,remote){
+  if(!remote) Bus.send({type:'cmd',c:c});
+  if(c==='shock') doShock(true);
+  if(c==='charge') doCharge(true);
+  if(c==='cpr'){ SIM.cpr=!SIM.cpr; trace.cpr=SIM.cpr; if(SIM.cpr) SIM.etco2=Math.max(SIM.etco2,12); syncButtons(); }
+  if(c==='pulsecheck') pulseCheck(true);
+  if(c==='nibp') paintNumbers();
+}
+function say(el,txt){ const e=$(el); if(e) e.textContent=txt; }
+
+/* ============================================================
+   Monitor loop
+   ============================================================ */
+function alarmState(){
+  const R=RHYTHMS[SIM.rhythm]||{};
+  if(!perfusing() || R.cat==='Arrest') return {lvl:'red', txt: SIM.rhythm==='asys'?'ASYSTOLE — NOT SHOCKABLE — START COMPRESSIONS'
+      : (SIM.rhythm==='vf'||SIM.rhythm==='vffine')?'VENTRICULAR FIBRILLATION — SHOCKABLE'
+      : SIM.rhythm==='pea'?'PULSELESS ELECTRICAL ACTIVITY — NOT SHOCKABLE'
+      : 'NO PULSE — CHECK THE PATIENT'};
+  if(SIM.rhythm==='vt') return {lvl:'red', txt:'VENTRICULAR TACHYCARDIA — CHECK FOR A PULSE'};
+  if(SIM.rhythm==='tdp') return {lvl:'red', txt:'TORSADES DE POINTES'};
+  const a=[];
+  const hr=displayHR();
+  if(hr && hr<50) a.push('BRADYCARDIA'); if(hr>130) a.push('TACHYCARDIA');
+  if(SIM.spo2 && SIM.spo2<92) a.push('SpO₂ LOW'); if(SIM.sbp && SIM.sbp<90) a.push('BP LOW');
+  if(SIM.rr>28) a.push('RESP HIGH'); if(SIM.temp>=38.5) a.push('TEMP HIGH');
+  if(SIM.pacing && SIM.pacerMa<SIM.captureAt && SIM.pacerMa>0) a.push('PACER — NO CAPTURE');
+  if(a.length) return {lvl:'amber', txt:a.join(' · ')};
+  return {lvl:'', txt:'Monitoring — no active alarms'};
+}
+function paintNumbers(){
+  if(!$('nHR')) return;
+  const hr=displayHR(), al=alarmState();
+  $('nHR').textContent = hr? hr : '- -';
+  $('nRhythm').textContent = (RHYTHMS[SIM.rhythm]||{}).name || '';
+  $('nSpO2').textContent = SIM.spo2? SIM.spo2 : '- -';
+  $('nPR').textContent = perfusing()? ('PR '+(hr||'- -')) : 'NO PULSE';
+  $('nBP').textContent = SIM.sbp? (SIM.sbp+'/'+SIM.dbp) : '- - / - -';
+  $('nMAP').textContent = SIM.sbp? ('('+Math.round((SIM.sbp+2*SIM.dbp)/3)+')') : '';
+  $('nRR').textContent = SIM.rr;
+  $('nCO2').textContent = 'EtCO₂ '+SIM.etco2+' · T '+SIM.temp.toFixed(1);
+  document.querySelector('.num.hr').classList.toggle('crit', !hr);
+  document.querySelector('.num.spo2').classList.toggle('crit', SIM.spo2<90);
+  document.querySelector('.num.nibp').classList.toggle('crit', SIM.sbp>0&&SIM.sbp<90);
+  const bar=$('alarmBar'); bar.className='alarmbar'+(al.lvl?' '+al.lvl:'');
+  $('alarmText').textContent = al.txt + (SIM.muted?'  ·  ALARMS MUTED':'');
+  $('bedTag').textContent = SIM.bed;
+  syncButtons();
+}
+function syncButtons(){
+  if(!$('dEnergy')) return;
+  $('dEnergy').textContent=SIM.energy+' J';
+  $('dSync').textContent='SYNC '+(SIM.sync?'on':'off'); $('dSync').classList.toggle('on',SIM.sync);
+  $('dCharge').classList.toggle('warn',SIM.charged);
+  $('dCharge').textContent=SIM.charged?'Charged '+SIM.energy+' J':'Charge';
+  $('pOn').textContent='Pacer '+(SIM.pacing?'on':'off'); $('pOn').classList.toggle('on',SIM.pacing);
+  $('pRate').textContent=SIM.pacerRate; $('pMa').textContent=SIM.pacerMa;
+  $('mCPR').textContent=SIM.cpr?'CPR running':'Start CPR'; $('mCPR').classList.toggle('on',SIM.cpr);
+  $('mSound').textContent='Sound '+(SIM.sound?'on':'off'); $('mSound').classList.toggle('on',SIM.sound);
+  $('mMute').classList.toggle('on',SIM.muted);
+}
+function loop(){
+  const now=performance.now()/1000 - t0;
+  simT=now;
+  trace.perf=perfusing(); trace.cpr=SIM.cpr; trace.t=now;
+  trace.sched(now+0.8);
+  if(VIEW==='monitor'){ paintTrace(now); beatAudio(now); }
+  if(heroTr && VIEW==='home' && !REDUCED) paintHero(now);
+  requestAnimationFrame(loop);
+}
+setInterval(()=>{ if(VIEW==='monitor') paintNumbers(); }, 400);
+setInterval(()=>{ if(Bus.mode!=='off') Bus.send({type:'state', s:{
+  hr:displayHR(), rhythm:SIM.rhythm, name:(RHYTHMS[SIM.rhythm]||{}).name, spo2:SIM.spo2,
+  sbp:SIM.sbp, dbp:SIM.dbp, rr:SIM.rr, etco2:SIM.etco2, temp:SIM.temp,
+  perf:perfusing(), cpr:SIM.cpr, pacing:SIM.pacing, ma:SIM.pacerMa, energy:SIM.energy, sync:SIM.sync, alarm:alarmState().txt
+}}); }, 900);
+function renderMirror(s){
+  const el=$('cMirror'); if(!el||!s) return;
+  el.innerHTML='<b>'+(s.name||'')+'</b><br>HR <b>'+(s.hr||'- -')+'</b> · SpO₂ <b>'+(s.spo2||'- -')+
+    '</b> · BP <b>'+(s.sbp?s.sbp+'/'+s.dbp:'- -')+'</b> · RR <b>'+s.rr+'</b> · EtCO₂ <b>'+s.etco2+
+    '</b><br>Pulse <b>'+(s.perf?'present':'ABSENT')+'</b> · CPR <b>'+(s.cpr?'running':'off')+
+    '</b> · Pacer <b>'+(s.pacing?s.ma+' mA':'off')+'</b> · Defib <b>'+s.energy+' J, sync '+(s.sync?'on':'off')+
+    '</b><br><span style="color:var(--warn)">'+(s.alarm||'')+'</span>';
+}
+
+/* ---------------- Defibrillator ---------------- */
+const ENERGIES=[50,70,100,120,150,170,200,300,360];
+function doCharge(remote){
+  SIM.charged=true; syncButtons();
+  say('dRead','Charged to '+SIM.energy+' J. Say it out loud: "Charging — stand clear."');
+  if(SIM.sound){ let f=420; const iv=setInterval(()=>{ f+=90; tone(f,0.09,0.05,'triangle'); if(f>1200) clearInterval(iv); },90); }
+  if(!remote) Bus.send({type:'cmd',c:'charge'});
+}
+function doShock(remote){
+  if(!remote) Bus.send({type:'cmd',c:'shock'});
+  const k=SIM.rhythm, chaotic=(k==='vf'||k==='vffine'||k==='tdp'||k==='asys');
+  if(!SIM.charged){ say('dRead','Nothing delivered — the defibrillator is not charged. Select energy, then charge.'); return; }
+  if(SIM.sync && chaotic){
+    say('dRead','⚠ NOTHING DISCHARGED. Synchronised mode is hunting for an R wave to time the shock to, and this rhythm has none. Turn SYNC off to defibrillate.');
+    return;
+  }
+  SIM.charged=false; SIM.shocks++;
+  tone(140,0.30,0.16,'sawtooth');
+  if(k==='vf'||k==='vffine'||k==='tdp'){
+    const win = Math.random() < (SIM.energy>=150?0.62:0.38);
+    if(win){ patchSim({rhythm:'nsr',hr:92,sbp:96,dbp:58,spo2:92,etco2:42,pulse:true}, remote);
+      say('dRead','Shock '+SIM.shocks+' delivered at '+SIM.energy+' J. Organised rhythm on the screen — resume compressions and check the pulse at the next cycle, not now.'); }
+    else { say('dRead','Shock '+SIM.shocks+' delivered at '+SIM.energy+' J. Still fibrillating. Resume compressions immediately — do not pause to look.'); }
+  } else if(k==='asys'||k==='pea'){
+    say('dRead','Shock delivered — but this rhythm is not shockable. Compressions, adrenaline and a search for the reversible cause are the treatment.');
+  } else if(SIM.sync){
+    patchSim({rhythm:'nsr',hr:88}, remote);
+    say('dRead','Synchronised cardioversion at '+SIM.energy+' J. Sinus rhythm restored. Reassess airway, sedation and blood pressure.');
+  } else {
+    say('dRead','⚠ Unsynchronised shock on an organised rhythm. A shock landing on the T wave can induce ventricular fibrillation. Sync on for cardioversion.');
+    if(Math.random()<0.5) patchSim({rhythm:'vf',pulse:false,sbp:0,dbp:0,spo2:0,etco2:12}, remote);
+  }
+  syncButtons(); paintNumbers();
+}
+
+/* ---------------- Pacer ---------------- */
+function pacerUpdate(){
+  if(SIM.pacing){
+    trace.paceCapture = SIM.pacerMa>=SIM.captureAt;
+    if(SIM.rhythm!=='paced') applyRhythm('paced',false);
+    trace.hr=SIM.pacerRate; SIM.hr=SIM.pacerRate;
+    say('pRead', SIM.pacerMa>=SIM.captureAt
+      ? 'Spike followed by a wide complex at '+SIM.pacerRate+'. That is ELECTRICAL capture only. Palpate a pulse before you report it.'
+      : 'Spikes with no following complex — failure to capture. Report it and expect the output to be increased.');
+  } else {
+    say('pRead','Pacer off. Electrical capture on the screen is not mechanical capture. Palpate.');
+  }
+  syncButtons(); paintNumbers();
+}
+function pulseCheck(remote){
+  if(!remote) Bus.send({type:'cmd',c:'pulsecheck'});
+  const has=perfusing();
+  say('pRead', has
+    ? '✓ Pulse palpable and matching the rate on the screen. Mechanical capture confirmed. Record the pulse and the blood pressure.'
+    : '✗ NO PALPABLE PULSE despite what the monitor shows. Say it out loud, start compressions and call for help. This is the finding students miss.');
+}
+
+/* ---------------- Monitor wiring ---------------- */
+function wireMonitor(){
+  $('dEnergyUp').onclick=()=>{ const i=ENERGIES.indexOf(SIM.energy); patchSim({energy:ENERGIES[Math.min(i+1,ENERGIES.length-1)]}); };
+  $('dEnergyDn').onclick=()=>{ const i=ENERGIES.indexOf(SIM.energy); patchSim({energy:ENERGIES[Math.max(i-1,0)]}); };
+  $('dSync').onclick=()=>{ patchSim({sync:!SIM.sync}); say('dRead', SIM.sync
+    ? 'SYNC on. The shock will be timed to an R wave — this is cardioversion, for organised rhythms with a pulse.'
+    : 'SYNC off. Unsynchronised — this is defibrillation, for ventricular fibrillation and pulseless ventricular tachycardia.'); };
+  $('dCharge').onclick=()=>doCharge();
+  $('dShock').onclick=()=>doShock();
+  $('pOn').onclick=()=>{ SIM.pacing=!SIM.pacing; if(!SIM.pacing){ SIM.pacerMa=0; applyRhythm('sb',false); } patchSim({pacing:SIM.pacing,pacerMa:SIM.pacerMa}); pacerUpdate(); };
+  $('pRateUp').onclick=()=>{ patchSim({pacerRate:Math.min(SIM.pacerRate+5,110)}); pacerUpdate(); };
+  $('pRateDn').onclick=()=>{ patchSim({pacerRate:Math.max(SIM.pacerRate-5,30)}); pacerUpdate(); };
+  $('pMaUp').onclick=()=>{ patchSim({pacerMa:Math.min(SIM.pacerMa+10,200)}); pacerUpdate(); };
+  $('pMaDn').onclick=()=>{ patchSim({pacerMa:Math.max(SIM.pacerMa-10,0)}); pacerUpdate(); };
+  $('pPulse').onclick=()=>pulseCheck();
+  $('mCPR').onclick=()=>runCmd('cpr');
+  $('mSound').onclick=()=>{ SIM.sound=!SIM.sound; if(SIM.sound){ audio(); tone(880,0.08,0.06); } syncButtons(); };
+  $('mMute').onclick=()=>{ SIM.muted=!SIM.muted; paintNumbers(); };
+  $('mFull').onclick=()=>{ const el=document.querySelector('#v-monitor .monitor');
+    if(!document.fullscreenElement){ el.requestFullscreen&&el.requestFullscreen(); } else document.exitFullscreen();
+    setTimeout(()=>{ drawGrid($('gridC')); initTrace(); },350); };
+  $('mPair').onclick=()=>{
+    const code=Bus.room||roomCode();
+    Bus.local(); Bus.cloud(code);
+    say('mRead','Room code '+code+'. On your phone, open this same link, tap Control, then Enter room code and type '+code+'.');
+  };
+  $('mSelf').onclick=()=>go('control');
+}
+
+/* ---------------- Control panel ---------------- */
+const CTL_RHYTHMS=['nsr','sb','st','afib','afibrvr','aflutter','svt','junc','pvc','avb1','mobitz1','mobitz2','chb','ivr','vt','tdp','vf','vffine','asys','pea','paced','stemi'];
+function buildControl(){
+  const r=$('cRhythms'); r.innerHTML='';
+  CTL_RHYTHMS.forEach(k=>{
+    const b=document.createElement('button'); b.className='chip'; b.style.justifyContent='flex-start';
+    b.textContent=RHYTHMS[k].name.replace('Sinus rhythm with premature ventricular complexes','Sinus with PVCs')
+      .replace('Second-degree AV block, ','').replace('Third-degree (complete) AV block','Complete heart block')
+      .replace('First-degree AV block','1st-degree AV block').replace('Sinus rhythm with ST-segment elevation','Sinus with ST elevation');
+    b.onclick=()=>{ patchSim({rhythm:k}); document.querySelectorAll('#cRhythms .chip').forEach(x=>x.classList.remove('on')); b.classList.add('on'); };
+    r.appendChild(b);
+  });
+  const v=$('cVitals'); v.innerHTML='';
+  [['spo2','SpO₂ %',1,50,100],['sbp','Systolic',5,0,220],['dbp','Diastolic',5,0,140],
+   ['rr','Resp rate',2,0,44],['etco2','EtCO₂',2,0,70],['hr','Rate',5,20,220]].forEach(([k,lab,st,lo,hi])=>{
+    const d=document.createElement('div'); d.className='stepper';
+    d.innerHTML='<button>−</button><span class="sv">'+lab+'<b data-v="'+k+'">'+SIM[k]+'</b></span><button>+</button>';
+    const bs=d.querySelectorAll('button');
+    const upd=n=>{ const val=clamp(Math.round(SIM[k]+n),lo,hi); const o={}; o[k]=val; patchSim(o);
+      d.querySelector('b').textContent=val; };
+    bs[0].onclick=()=>upd(-st); bs[1].onclick=()=>upd(st);
+    v.appendChild(d);
+  });
+  const e=$('cEvents'); e.innerHTML='';
+  const evs=[
+    ['Arrest — VF',()=>patchSim({rhythm:'vf',pulse:false,sbp:0,dbp:0,spo2:0,etco2:12})],
+    ['Arrest — asystole',()=>patchSim({rhythm:'asys',pulse:false,sbp:0,dbp:0,spo2:0,etco2:8})],
+    ['Arrest — PEA',()=>patchSim({rhythm:'pea',pulse:false,sbp:0,dbp:0,spo2:0,etco2:14})],
+    ['Lose the pulse',()=>patchSim({pulse:false,sbp:0,dbp:0,spo2:0})],
+    ['Return of circulation',()=>patchSim({rhythm:'st',hr:104,pulse:true,sbp:98,dbp:56,spo2:93,etco2:40})],
+    ['Crash the pressure',()=>patchSim({sbp:Math.max(SIM.sbp-30,50),dbp:Math.max(SIM.dbp-18,28)})],
+    ['Desaturate',()=>patchSim({spo2:Math.max(SIM.spo2-6,60),rr:Math.min(SIM.rr+6,44)})],
+    ['Spike a fever',()=>patchSim({temp:Math.min(SIM.temp+0.8,41),hr:Math.min(SIM.hr+14,180)})],
+    ['Arterial line on',()=>patchSim({art:!SIM.art})],
+    ['Toggle CPR',()=>runCmd('cpr')],
+    ['Charge defib',()=>runCmd('charge')],
+    ['Deliver shock',()=>runCmd('shock')],
+    ['Reset to baseline',()=>{ patchSim({rhythm:'nsr',hr:78,spo2:98,rr:16,etco2:35,temp:36.8,sbp:118,dbp:72,pulse:true,pacing:false,pacerMa:0,art:false,cpr:false}); }]
+  ];
+  evs.forEach(([lab,fn])=>{ const b=document.createElement('button'); b.className='chip'; b.style.justifyContent='center';
+    if(lab.startsWith('Arrest')||lab==='Lose the pulse') b.classList.add('danger');
+    b.textContent=lab; b.onclick=fn; e.appendChild(b); });
+
+  $('cPairLocal').onclick=()=>{ Bus.local(); };
+  $('cPairRoom').onclick=()=>{
+    const c=(prompt('Room code shown on the display:')||'').trim().toUpperCase();
+    if(c.length>=3){ Bus.local(); Bus.cloud(c); }
+  };
+}
+
+/* ============================================================
+   Drill
+   ============================================================ */
+const D={pool:[],idx:0,score:0,streak:0,ans:null,timer:null,left:15,rec:[],level:'found'};
+function startDrill(level){
+  D.level=level; D.pool=DRILL_SETS[level].slice(); D.idx=0; D.score=0; D.streak=0; D.rec=[];
+  $('drillSetup').classList.add('hide'); $('drillDone').classList.add('hide'); $('drillPlay').classList.remove('hide');
+  nextItem();
+}
+function nextItem(){
+  if(D.idx>=10) return endDrill();
+  D.idx++;
+  const pool=D.pool;
+  const key=pool[Math.floor(Math.random()*pool.length)];
+  D.ans=key;
+  const opts=[key];
+  const rest=pool.filter(k=>k!==key);
+  const sameCat=rest.filter(k=>RHYTHMS[k].cat===RHYTHMS[key].cat);
+  while(opts.length<4 && (sameCat.length||rest.length)){
+    const src = (opts.length<3 && sameCat.length)? sameCat : rest;
+    const p=src.splice(Math.floor(Math.random()*src.length),1)[0];
+    if(p && !opts.includes(p)) opts.push(p);
+  }
+  opts.sort(()=>Math.random()-0.5);
+  $('dqNum').textContent='Item '+D.idx+' of 10';
+  $('dqScore').textContent=D.score; $('dqStreak').textContent=D.streak;
+  $('dqFb').innerHTML=''; $('dqNext').classList.add('hide');
+  requestAnimationFrame(()=>renderStrip($('dqStrip'),key,6));
+  const box=$('dqOpts'); box.innerHTML='';
+  opts.forEach((k,i)=>{
+    const b=document.createElement('button'); b.className='opt';
+    b.dataset.k=k;
+    b.innerHTML='<span class="mk">'+'ABCD'[i]+'</span>'+RHYTHMS[k].name;
+    b.onclick=()=>answer(k,b); box.appendChild(b);
+  });
+  D.left=15.0; clearInterval(D.timer);
+  D.timer=setInterval(()=>{ D.left-=0.1; $('dqTimer').textContent=Math.max(0,D.left).toFixed(1)+' s';
+    if(D.left<=0){ clearInterval(D.timer); answer(null,null); } },100);
+}
+function answer(key,btn){
+  clearInterval(D.timer);
+  const right = key===D.ans;
+  const bonus = right? Math.round(clamp(D.left,0,15)/3) : 0;
+  if(right){ D.score+=10+bonus; D.streak++; } else { D.streak=0; }
+  D.rec.push({ans:D.ans, given:key, right:right});
+  document.querySelectorAll('#dqOpts .opt').forEach(b=>{ b.onclick=null;
+    if(b.dataset.k===D.ans) b.classList.add('right'); });
+  if(btn && !right) btn.classList.add('wrong');
+  const R=RHYTHMS[D.ans];
+  $('dqFb').innerHTML='<div class="fb"><b>'+R.name+'</b>'+
+    (key===null?' — time ran out.':(right?' — correct, +'+(10+bonus)+'.':' — not this one.'))+
+    '<table class="tb" style="margin-top:8px"><tbody>'+
+    '<tr><td style="width:26%"><b>Rate</b></td><td>'+R.crit.rate+'</td></tr>'+
+    '<tr><td><b>Rhythm</b></td><td>'+R.crit.rhythm+'</td></tr>'+
+    '<tr><td><b>P waves</b></td><td>'+R.crit.p+'</td></tr>'+
+    '<tr><td><b>PR interval</b></td><td>'+R.crit.pr+'</td></tr>'+
+    '<tr><td><b>QRS</b></td><td>'+R.crit.qrs+'</td></tr></tbody></table>'+
+    '<p style="margin:9px 0 0"><b>Nursing priority.</b> '+R.nurse+'</p>'+
+    (R.alert?'<p style="margin:7px 0 0; color:#8E1F22"><b>Alert.</b> '+R.alert+'</p>':'')+'</div>';
+  $('dqScore').textContent=D.score; $('dqStreak').textContent=D.streak;
+  $('dqNext').classList.remove('hide');
+  $('dqNext').textContent = D.idx>=10? 'See your round summary':'Next strip';
+}
+function endDrill(){
+  clearInterval(D.timer);
+  $('drillPlay').classList.add('hide');
+  const right=D.rec.filter(r=>r.right).length;
+  const missed={};
+  D.rec.filter(r=>!r.right).forEach(r=>{ missed[r.ans]=(missed[r.ans]||0)+1; });
+  const keys=Object.keys(missed);
+  const el=$('drillDone'); el.classList.remove('hide');
+  el.innerHTML='<div class="panel"><h3 style="font-size:20px; color:var(--maroon-d)">Round complete — '+DRILL_LABEL[D.level]+'</h3>'+
+    '<p class="lead" style="margin-top:6px">'+right+' of 10 correct · '+D.score+' points.</p>'+
+    (keys.length? '<div class="callout c-alert"><h5>Take these back to the strip book</h5><ul style="margin:6px 0 0; padding-left:18px">'+
+      keys.map(k=>'<li><b>'+RHYTHMS[k].name+'</b> — '+RHYTHMS[k].crit.qrs+'; '+RHYTHMS[k].crit.p+'</li>').join('')+'</ul></div>'
+     : '<div class="callout c-key"><h5>Clean round</h5>Every strip identified. Move up a level, or take the arrest set against the clock.</div>')+
+    '<div class="row" style="gap:8px; margin-top:12px"><button class="btn" id="dqAgain">Run another round</button>'+
+    '<button class="btn ghost" data-go="scenario">Try a scenario</button></div></div>';
+  $('dqAgain').onclick=()=>{ $('drillDone').classList.add('hide'); $('drillSetup').classList.remove('hide'); };
+}
+
+/* ============================================================
+   Scenarios
+   ============================================================ */
+const SC={s:null,step:0,score:0,max:0,rec:[]};
+function listScenarios(){
+  const el=$('scList'); el.innerHTML='';
+  SCENARIOS.forEach(s=>{
+    const b=document.createElement('button'); b.className='card';
+    b.innerHTML='<h3>'+s.title+'</h3><p>'+s.blurb+'</p><span class="kbd">'+s.module+' · '+s.steps.length+' decisions</span>';
+    b.onclick=()=>startScenario(s); el.appendChild(b);
+  });
+  $('scPlay').classList.add('hide'); el.classList.remove('hide');
+}
+function startScenario(s){
+  SC.s=s; SC.step=0; SC.score=0; SC.max=s.steps.length*2; SC.rec=[];
+  Object.assign(SIM, s.start); applyRhythm(s.start.rhythm,true); SIM.hr=s.start.hr; trace.hr=s.start.hr;
+  $('scList').classList.add('hide'); $('scPlay').classList.remove('hide');
+  renderStep(true);
+}
+function vitalRow(){
+  return '<div class="scorebar" style="margin-top:10px; font-size:12.5px">'+
+    '<span class="pill">'+((RHYTHMS[SIM.rhythm]||{}).name||'')+'</span>'+
+    '<span>HR <b>'+(displayHR()||'- -')+'</b></span><span>BP <b>'+(SIM.sbp?SIM.sbp+'/'+SIM.dbp:'- -')+'</b></span>'+
+    '<span>SpO₂ <b>'+(SIM.spo2||'- -')+'</b></span><span>RR <b>'+SIM.rr+'</b></span>'+
+    '<span>EtCO₂ <b>'+SIM.etco2+'</b></span><span>T <b>'+SIM.temp.toFixed(1)+'</b></span>'+
+    '<span>Pulse <b style="color:'+(perfusing()?'var(--ok)':'var(--alarm)')+'">'+(perfusing()?'present':'ABSENT')+'</b></span></div>';
+}
+function renderStep(first){
+  const s=SC.s, st=s.steps[SC.step];
+  if(st.patch){ Object.assign(SIM, st.patch); if(st.patch.rhythm) applyRhythm(st.patch.rhythm,true); if(st.patch.hr) trace.hr=st.patch.hr; }
+  const el=$('scPlay');
+  el.innerHTML='<div class="panel"><div class="eyebrow" style="color:var(--maroon)">'+s.module+'</div>'+
+    '<h3 style="font-size:21px; color:var(--maroon-d); margin-bottom:8px">'+s.title+'</h3>'+
+    (first? '<p class="lead">'+s.brief+'</p>':'')+
+    '<canvas class="strip" id="scStrip" style="height:120px; margin-top:12px"></canvas>'+ vitalRow()+
+    '<div class="scorebar" style="margin:14px 0 8px"><span class="pill">Decision '+(SC.step+1)+' of '+s.steps.length+'</span>'+
+    '<span>Score <b>'+SC.score+'</b> / '+SC.max+'</span>'+
+    '<button class="btn sm ghost" id="scQuit" style="margin-left:auto">Leave scenario</button></div>'+
+    '<h4 style="font-size:16px; margin:6px 0 10px">'+st.q+'</h4><div id="scOpts"></div><div id="scFb"></div>'+
+    '<button class="btn hide" id="scNext" style="margin-top:10px">Continue</button></div>';
+  requestAnimationFrame(()=>renderStrip($('scStrip'),SIM.rhythm,6,{hr:SIM.hr}));
+  $('scQuit').onclick=()=>listScenarios();
+  const box=$('scOpts');
+  const opts=st.o.map((o,i)=>({o,i})).sort(()=>Math.random()-0.5);
+  opts.forEach((p,i)=>{
+    const b=document.createElement('button'); b.className='opt';
+    b.innerHTML='<span class="mk">'+'ABCD'[i]+'</span>'+p.o.t;
+    b.onclick=()=>chooseStep(p.o,b); box.appendChild(b);
+  });
+}
+function chooseStep(o,btn){
+  SC.score+=o.ok; SC.rec.push(o.ok);
+  document.querySelectorAll('#scOpts .opt').forEach(b=>b.onclick=null);
+  if(o.ok===2) btn.classList.add('right');
+  else if(o.ok===0) btn.classList.add('wrong');
+  else btn.style.borderColor='var(--warn)';
+  if(o.patch){ Object.assign(SIM,o.patch); if(o.patch.rhythm) applyRhythm(o.patch.rhythm,true); }
+  $('scFb').innerHTML='<div class="fb">'+(o.ok===2?'<b>Best answer.</b> ':o.ok===1?'<b>Defensible, but incomplete.</b> ':'<b>Not safe here.</b> ')+o.fb+'</div>';
+  const n=$('scNext'); n.classList.remove('hide');
+  n.textContent = SC.step+1>=SC.s.steps.length? 'Go to debrief':'Continue';
+  n.onclick=()=>{ SC.step++; if(SC.step>=SC.s.steps.length) debrief(); else renderStep(false); };
+}
+function debrief(){
+  const s=SC.s, pct=Math.round(SC.score/SC.max*100);
+  const band = pct>=85?'Ready to be useful in the room':pct>=65?'Sound instincts, gaps in sequence':'Review before the next laboratory session';
+  $('scPlay').innerHTML='<div class="panel"><div class="eyebrow" style="color:var(--maroon)">Debrief</div>'+
+    '<h3 style="font-size:22px; color:var(--maroon-d)">'+s.title+'</h3>'+
+    '<div class="scorebar" style="margin:10px 0"><span class="pill">'+SC.score+' / '+SC.max+' · '+pct+'%</span><span>'+band+'</span></div>'+
+    '<div class="callout c-alert"><h5>The earliest recoverable moment</h5>'+s.debrief.moment+'</div>'+
+    '<div class="callout c-key"><h5>What this scenario was teaching</h5><ul style="margin:6px 0 0; padding-left:18px">'+
+      s.debrief.points.map(p=>'<li style="margin-bottom:6px">'+p+'</li>').join('')+'</ul></div>'+
+    '<div class="callout c-ebp"><h5>Sources</h5>'+s.debrief.cite+'. Full entries are on the Evidence tab.</div>'+
+    '<div class="callout c-key"><h5>Scope reminder</h5>Every correct answer in this scenario was a recognition, an escalation, a preparation or a monitoring action. None of them was an independent decision to prescribe, titrate or operate. That boundary is the assessment.</div>'+
+    '<div class="row" style="gap:8px; margin-top:12px"><button class="btn" id="scAgain">Run it again</button>'+
+    '<button class="btn ghost" id="scBack">Other scenarios</button></div></div>';
+  $('scAgain').onclick=()=>startScenario(s);
+  $('scBack').onclick=()=>listScenarios();
+}
+
+/* ============================================================
+   Evidence
+   ============================================================ */
+const MAPPING=[
+ ["Synchronised mode does not discharge in ventricular fibrillation","Wigginton et al. (2025); Urden et al. (2024)"],
+ ["Compressions resume immediately after a shock, without a rhythm or pulse check","Wigginton et al. (2025)"],
+ ["Waveform capnography as a measure of compression quality and a signal of restored circulation","Wigginton et al. (2025)"],
+ ["Pulseless electrical activity and asystole are not shockable","Wigginton et al. (2025)"],
+ ["Electrical capture versus mechanical capture during transcutaneous pacing","Urden et al. (2024)"],
+ ["Magnesium as the treatment of choice in torsades de pointes","Urden et al. (2024)"],
+ ["Cultures and lactate before antibiotics; fluid-refractory hypotension defines septic shock","Evans et al. (2021)"],
+ ["Terminology: 'breaths' rather than 'rescue breaths'; return of circulation distinguished from return of spontaneous circulation","American Heart Association (2025)"],
+ ["Simulation, gamified elements and rapid-cycle deliberate practice as recommended training methods","American Heart Association (2025)"]
+];
+function buildEvidence(){
+  const el=$('evBody'); if(el.dataset.built) return; el.dataset.built='1';
+  el.innerHTML=
+   '<div class="callout c-ebp"><h5>How to read this list</h5>Sources are APA 7th edition. Anything published before 2021 appears only in the flagged section below, with the reason it was kept. Verify pagination and DOIs against your library copy before these entries go into a printed course pack.</div>'+
+   '<div class="sect"><h2>Where each behaviour comes from</h2><div class="scroller"><table class="tb"><thead><tr><th style="width:58%">Behaviour built into the simulator</th><th>Source</th></tr></thead><tbody>'+
+     MAPPING.map(m=>'<tr><td>'+m[0]+'</td><td>'+m[1]+'</td></tr>').join('')+
+   '</tbody></table></div></div>'+
+   '<div class="sect"><h2>References</h2><ul class="refs" style="padding-left:0">'+
+     REFERENCES.map(r=>'<li>'+r.r+'<div class="tiny" style="text-indent:0; margin-top:4px">'+r.n+'</div></li>').join('')+
+   '</ul></div>'+
+   '<div class="sect"><h2>Retained outside the five-year window</h2>'+
+     '<div class="callout c-alert"><h5>Read these with the flag attached</h5>Each entry below predates 2021 and is kept only because nothing has superseded it for the specific point it supports. Check for a newer focused update before teaching from it.</div>'+
+     '<ul class="refs" style="padding-left:0">'+
+     REF_FLAGGED.map(r=>'<li>'+r.r+'<div class="tiny" style="text-indent:0; margin-top:4px">'+r.n+'</div></li>').join('')+
+   '</ul></div>'+
+   '<div class="sect"><h2>Limits of this simulator</h2><div class="panel">'+
+     '<p style="margin-top:0; font-size:14px; line-height:1.6">The waveforms are synthesised for teaching, not recorded from patients. They reproduce the features used in rhythm interpretation — rate, regularity, P-wave behaviour, PR relationship and QRS width — but they are not diagnostic tracings and must never be presented as such. This tool holds no patient data, and none should ever be entered into it.</p>'+
+     '<p style="font-size:14px; line-height:1.6; margin-bottom:0">Energy levels, drug sequences and escalation thresholds vary between institutions. Where this simulator shows a number, treat it as a placeholder to be replaced with your own institution\'s protocol before the session.</p>'+
+   '</div></div>';
+}
+
+/* ============================================================
+   Hero trace
+   ============================================================ */
+let heroTr=null, heroC=null, heroX=null;
+function initHero(){
+  heroC=$('heroCanvas'); if(!heroC||!fitCanvas(heroC)) return;
+  heroX=heroC.getContext('2d');
+  heroTr=new Trace(); heroTr.t=0; heroTr.tp=0.2; heroTr.tq=0.2; heroTr.set('nsr'); heroTr.hr=72; heroTr.perf=true;
+  if(REDUCED){ heroTr.sched(9); paintHeroStatic(); }
+}
+function paintHeroStatic(){
+  const r=heroC.getBoundingClientRect(), W=r.width, H=r.height;
+  heroX.clearRect(0,0,W,H); heroX.strokeStyle=cssv('--ecg'); heroX.lineWidth=1.8; heroX.beginPath();
+  for(let i=0;i<=W;i++){ const t=(i/W)*8, y=H*0.55-heroTr.ecg(t)*H*0.34; if(!i) heroX.moveTo(0,y); else heroX.lineTo(i,y); }
+  heroX.stroke();
+}
+function paintHero(now){
+  const r=heroC.getBoundingClientRect(), W=r.width, H=r.height;
+  heroTr.t=now; heroTr.sched(now+1);
+  heroX.clearRect(0,0,W,H);
+  heroX.strokeStyle=cssv('--ecg'); heroX.lineWidth=1.8; heroX.lineJoin='round'; heroX.beginPath();
+  for(let i=0;i<=W;i+=1){ const t=now-8+(i/W)*8, y=H*0.55-heroTr.ecg(t)*H*0.34; if(!i) heroX.moveTo(0,y); else heroX.lineTo(i,y); }
+  heroX.stroke();
+}
+
+/* ============================================================
+   Boot
+   ============================================================ */
+function boot(){
+  wireMonitor(); buildControl();
+  document.querySelectorAll('[data-level]').forEach(b=>b.onclick=()=>startDrill(b.dataset.level));
+  $('dqNext').onclick=()=>nextItem();
+  $('dqQuit').onclick=()=>endDrill();
+  listScenarios();
+  applyRhythm('nsr',false); SIM.hr=78; trace.hr=78; trace.perf=true;
+  initHero(); paintNumbers();
+  const q=new URLSearchParams(location.search);
+  if(q.get('role')==='control'){ go('control'); Bus.local(); const rm=(q.get('r')||'').toUpperCase(); if(rm) Bus.cloud(rm); }
+  else if(q.get('role')==='display'){ go('monitor'); }
+  requestAnimationFrame(loop);
+}
+let rz=null;
+window.addEventListener('resize',()=>{ clearTimeout(rz); rz=setTimeout(()=>{
+  if(VIEW==='monitor'){ drawGrid($('gridC')); initTrace(); }
+  if(heroC) fitCanvas(heroC);
+},220); });
+document.addEventListener('keydown',e=>{
+  if(VIEW!=='monitor') return;
+  if(e.key==='c'||e.key==='C') doCharge();
+  if(e.key==='s'||e.key==='S') doShock();
+  if(e.key===' '){ e.preventDefault(); runCmd('cpr'); }
+});
+boot();
+</script>
+</body></html>
